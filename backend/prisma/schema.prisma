@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Trip {
+  id            String   @id @default(cuid())
+  name          String
+  destination   String
+  startDate     DateTime
+  endDate       DateTime
+  coverImageUrl String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  days          Day[]
+}
+
+model Day {
+  id        String   @id @default(cuid())
+  tripId    String
+  date      DateTime
+  dayNumber Int
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  slots     Slot[]
+
+  @@unique([tripId, dayNumber])
+}
+
+model Slot {
+  id        String   @id @default(cuid())
+  dayId     String
+  type      String
+  sortOrder Int      @default(0)
+  data      String   @default("{}")
+  day       Day      @relation(fields: [dayId], references: [id], onDelete: Cascade)
+}
