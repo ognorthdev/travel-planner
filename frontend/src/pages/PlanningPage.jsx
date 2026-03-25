@@ -8,11 +8,11 @@ import {
 import { slotsApi, tripsApi, aiApi } from '../api/index.js';
 
 const SLOT_CONFIG = {
-  HOTEL: { label: 'Hotel', icon: Hotel, color: 'text-purple-600', bg: 'bg-purple-50', grad: 'from-purple-500 to-indigo-600' },
-  BREAKFAST: { label: 'Breakfast', icon: Coffee, color: 'text-amber-600', bg: 'bg-amber-50', grad: 'from-amber-400 to-orange-500' },
-  LUNCH: { label: 'Lunch', icon: Utensils, color: 'text-green-600', bg: 'bg-green-50', grad: 'from-green-500 to-teal-600' },
-  DINNER: { label: 'Dinner', icon: Moon, color: 'text-indigo-600', bg: 'bg-indigo-50', grad: 'from-indigo-500 to-purple-600' },
-  ACTIVITY: { label: 'Activity', icon: Sun, color: 'text-teal-600', bg: 'bg-teal-50', grad: 'from-teal-500 to-ocean-600' }
+  HOTEL: { label: 'Hotel', icon: Hotel, color: 'text-purple-400', bg: 'bg-purple-900/30', grad: 'from-purple-600 to-indigo-700' },
+  BREAKFAST: { label: 'Breakfast', icon: Coffee, color: 'text-amber-400', bg: 'bg-amber-900/30', grad: 'from-amber-500 to-orange-600' },
+  LUNCH: { label: 'Lunch', icon: Utensils, color: 'text-green-400', bg: 'bg-green-900/30', grad: 'from-green-600 to-teal-700' },
+  DINNER: { label: 'Dinner', icon: Moon, color: 'text-indigo-400', bg: 'bg-indigo-900/30', grad: 'from-indigo-600 to-purple-700' },
+  ACTIVITY: { label: 'Activity', icon: Sun, color: 'text-teal-400', bg: 'bg-teal-900/30', grad: 'from-teal-600 to-ocean-700' }
 };
 
 function InputField({ label, icon: Icon, type = 'text', value, onChange, placeholder, required }) {
@@ -81,14 +81,14 @@ function AISuggestionCard({ suggestion, source, onApply, slotType }) {
   const isAI = source !== 'placeholder';
 
   return (
-    <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-200 rounded-2xl overflow-hidden animate-slide-up">
-      <div className="flex items-center justify-between p-4 border-b border-violet-100">
+    <div className="bg-violet-900/20 border border-violet-700/50 rounded-2xl overflow-hidden animate-slide-up">
+      <div className="flex items-center justify-between p-4 border-b border-violet-700/30">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-violet-500 flex items-center justify-center">
+          <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center">
             <Wand2 size={14} className="text-white" />
           </div>
           <div>
-            <p className="font-semibold text-violet-800 text-sm">AI Suggestion</p>
+            <p className="font-semibold text-violet-300 text-sm">AI Suggestion</p>
             <p className="text-xs text-violet-500">
               {isAI ? `Powered by ${source === 'claude' ? 'Claude' : 'Gemini'}` : 'Example suggestion'}
             </p>
@@ -96,7 +96,7 @@ function AISuggestionCard({ suggestion, source, onApply, slotType }) {
         </div>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="p-1.5 rounded-lg hover:bg-violet-100 transition-colors text-violet-500"
+          className="p-1.5 rounded-lg hover:bg-violet-800/50 transition-colors text-violet-400"
         >
           {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
@@ -107,7 +107,7 @@ function AISuggestionCard({ suggestion, source, onApply, slotType }) {
           {slotType === 'HOTEL' && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h4 className="font-bold text-slate-800">{suggestion.hotelName}</h4>
+                <h4 className="font-bold text-slate-100">{suggestion.hotelName}</h4>
                 {suggestion.starRating && (
                   <div className="flex items-center gap-1">
                     {Array.from({ length: suggestion.starRating }).map((_, i) => (
@@ -116,13 +116,13 @@ function AISuggestionCard({ suggestion, source, onApply, slotType }) {
                   </div>
                 )}
               </div>
-              {suggestion.address && <p className="text-sm text-slate-500 flex items-center gap-1"><MapPin size={12} />{suggestion.address}</p>}
-              {suggestion.priceRange && <p className="text-sm text-emerald-600 font-medium">{suggestion.priceRange}</p>}
-              {suggestion.description && <p className="text-sm text-slate-600 mt-2">{suggestion.description}</p>}
+              {suggestion.address && <p className="text-sm text-slate-400 flex items-center gap-1"><MapPin size={12} />{suggestion.address}</p>}
+              {suggestion.priceRange && <p className="text-sm text-emerald-400 font-medium">{suggestion.priceRange}</p>}
+              {suggestion.description && <p className="text-sm text-slate-300 mt-2">{suggestion.description}</p>}
               {suggestion.amenities && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {suggestion.amenities.split(',').map((a, i) => (
-                    <span key={i} className="bg-white text-violet-700 text-xs px-2 py-0.5 rounded-full border border-violet-200">
+                    <span key={i} className="bg-slate-700 text-violet-300 text-xs px-2 py-0.5 rounded-full border border-violet-700/50">
                       {a.trim()}
                     </span>
                   ))}
@@ -133,30 +133,30 @@ function AISuggestionCard({ suggestion, source, onApply, slotType }) {
 
           {(slotType === 'BREAKFAST' || slotType === 'LUNCH' || slotType === 'DINNER') && (
             <div className="space-y-2">
-              <h4 className="font-bold text-slate-800">{suggestion.restaurantName}</h4>
-              {suggestion.cuisine && <span className="inline-block bg-white text-violet-700 text-xs px-2 py-0.5 rounded-full border border-violet-200">{suggestion.cuisine}</span>}
-              {suggestion.address && <p className="text-sm text-slate-500 flex items-center gap-1"><MapPin size={12} />{suggestion.address}</p>}
-              {suggestion.priceRange && <p className="text-sm text-emerald-600 font-medium">{suggestion.priceRange}</p>}
-              {suggestion.description && <p className="text-sm text-slate-600 mt-2">{suggestion.description}</p>}
-              {suggestion.mustTry && <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-2">Must try: <strong>{suggestion.mustTry}</strong></p>}
+              <h4 className="font-bold text-slate-100">{suggestion.restaurantName}</h4>
+              {suggestion.cuisine && <span className="inline-block bg-slate-700 text-violet-300 text-xs px-2 py-0.5 rounded-full border border-violet-700/50">{suggestion.cuisine}</span>}
+              {suggestion.address && <p className="text-sm text-slate-400 flex items-center gap-1"><MapPin size={12} />{suggestion.address}</p>}
+              {suggestion.priceRange && <p className="text-sm text-emerald-400 font-medium">{suggestion.priceRange}</p>}
+              {suggestion.description && <p className="text-sm text-slate-300 mt-2">{suggestion.description}</p>}
+              {suggestion.mustTry && <p className="text-sm text-amber-300 bg-amber-900/30 rounded-lg px-3 py-2 mt-2">Must try: <strong>{suggestion.mustTry}</strong></p>}
             </div>
           )}
 
           {slotType === 'ACTIVITY' && (
             <div className="space-y-2">
-              <h4 className="font-bold text-slate-800">{suggestion.activityName}</h4>
-              {suggestion.category && <span className="inline-block bg-white text-violet-700 text-xs px-2 py-0.5 rounded-full border border-violet-200">{suggestion.category}</span>}
-              {suggestion.location && <p className="text-sm text-slate-500 flex items-center gap-1"><MapPin size={12} />{suggestion.location}</p>}
-              {suggestion.duration && <p className="text-sm text-slate-500 flex items-center gap-1"><Clock size={12} />{suggestion.duration}</p>}
-              {suggestion.description && <p className="text-sm text-slate-600 mt-2">{suggestion.description}</p>}
-              {suggestion.bestTime && <p className="text-sm text-teal-700 bg-teal-50 rounded-lg px-3 py-2 mt-2">Best time: <strong>{suggestion.bestTime}</strong></p>}
+              <h4 className="font-bold text-slate-100">{suggestion.activityName}</h4>
+              {suggestion.category && <span className="inline-block bg-slate-700 text-violet-300 text-xs px-2 py-0.5 rounded-full border border-violet-700/50">{suggestion.category}</span>}
+              {suggestion.location && <p className="text-sm text-slate-400 flex items-center gap-1"><MapPin size={12} />{suggestion.location}</p>}
+              {suggestion.duration && <p className="text-sm text-slate-400 flex items-center gap-1"><Clock size={12} />{suggestion.duration}</p>}
+              {suggestion.description && <p className="text-sm text-slate-300 mt-2">{suggestion.description}</p>}
+              {suggestion.bestTime && <p className="text-sm text-teal-300 bg-teal-900/30 rounded-lg px-3 py-2 mt-2">Best time: <strong>{suggestion.bestTime}</strong></p>}
             </div>
           )}
 
           {suggestion.tips && (
-            <div className="flex items-start gap-2 mt-3 bg-white rounded-lg p-3 border border-violet-100">
-              <Info size={14} className="text-violet-500 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-slate-600">{suggestion.tips}</p>
+            <div className="flex items-start gap-2 mt-3 bg-slate-700/50 rounded-lg p-3 border border-violet-700/30">
+              <Info size={14} className="text-violet-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-300">{suggestion.tips}</p>
             </div>
           )}
 
@@ -223,7 +223,7 @@ function MealForm({ data, onChange, destination, slotType, onAISuggest, aiLoadin
         <button
           onClick={() => onAISuggest({ destination, mealType: slotType, cuisinePreferences: data.cuisine, budget: data.priceRange })}
           disabled={aiLoading}
-          className="w-full border-2 border-violet-200 hover:border-violet-400 bg-violet-50 hover:bg-violet-100 text-violet-700 font-semibold py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+          className="w-full border-2 border-violet-700/50 hover:border-violet-500 bg-violet-900/20 hover:bg-violet-900/40 text-violet-300 font-semibold py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
         >
           {aiLoading ? (
             <><Loader2 size={16} className="animate-spin" />Getting AI suggestion...</>
@@ -295,7 +295,7 @@ function ActivityForm({ data, onChange, destination, onAISuggest, aiLoading }) {
         <button
           onClick={() => onAISuggest({ destination, category: data.category, duration: data.duration })}
           disabled={aiLoading}
-          className="w-full border-2 border-violet-200 hover:border-violet-400 bg-violet-50 hover:bg-violet-100 text-violet-700 font-semibold py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+          className="w-full border-2 border-violet-700/50 hover:border-violet-500 bg-violet-900/20 hover:bg-violet-900/40 text-violet-300 font-semibold py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
         >
           {aiLoading ? (
             <><Loader2 size={16} className="animate-spin" />Getting AI suggestion...</>
@@ -375,7 +375,7 @@ function HotelForm({ data, onChange, destination, onAISuggest, aiLoading }) {
         <button
           onClick={() => onAISuggest({ destination, budget: data.priceRange })}
           disabled={aiLoading}
-          className="w-full border-2 border-violet-200 hover:border-violet-400 bg-violet-50 hover:bg-violet-100 text-violet-700 font-semibold py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+          className="w-full border-2 border-violet-700/50 hover:border-violet-500 bg-violet-900/20 hover:bg-violet-900/40 text-violet-300 font-semibold py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
         >
           {aiLoading ? (
             <><Loader2 size={16} className="animate-spin" />Getting AI suggestion...</>
@@ -502,10 +502,10 @@ export default function PlanningPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 size={40} className="animate-spin text-ocean-400" />
-          <p className="text-slate-500 font-medium">Loading...</p>
+          <p className="text-slate-400 font-medium">Loading...</p>
         </div>
       </div>
     );
@@ -513,11 +513,11 @@ export default function PlanningPage() {
 
   if (error && !slot) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl p-8 text-center shadow-sm max-w-md w-full">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center shadow-sm max-w-md w-full">
           <div className="text-4xl mb-3">⚠️</div>
-          <h3 className="font-bold text-slate-800 text-lg mb-2">Error</h3>
-          <p className="text-slate-500 mb-4">{error}</p>
+          <h3 className="font-bold text-slate-100 text-lg mb-2">Error</h3>
+          <p className="text-slate-400 mb-4">{error}</p>
           <button onClick={() => navigate(`/trips/${tripId}`)} className="btn-secondary mx-auto">
             <ArrowLeft size={16} />
             Back to Trip
@@ -533,14 +533,14 @@ export default function PlanningPage() {
   const destination = trip?.destination || '';
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-900">
       {/* Header */}
-      <header className="bg-white border-b border-slate-100 shadow-sm sticky top-0 z-10">
+      <header className="bg-slate-800 border-b border-slate-700 shadow-sm sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 sm:px-6">
           <div className="flex items-center gap-4 h-16">
             <button
               onClick={() => navigate(`/trips/${tripId}`)}
-              className="p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-600"
+              className="p-2 rounded-full hover:bg-slate-700 transition-colors text-slate-400"
             >
               <ArrowLeft size={20} />
             </button>
@@ -549,7 +549,7 @@ export default function PlanningPage() {
                 <Icon size={18} className="text-white" />
               </div>
               <div>
-                <h1 className="font-bold text-slate-800">{config.label} Planning</h1>
+                <h1 className="font-bold text-slate-100">{config.label} Planning</h1>
                 <p className="text-xs text-slate-400">{trip?.name} · {destination}</p>
               </div>
             </div>
@@ -577,13 +577,13 @@ export default function PlanningPage() {
       {/* Content */}
       <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">
+          <div className="bg-red-900/30 border border-red-700 rounded-xl px-4 py-3 text-red-300 text-sm">
             {error}
           </div>
         )}
 
         {/* Form Card */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-sm overflow-hidden">
           <div className={`bg-gradient-to-r ${config.grad} px-6 py-4 text-white`}>
             <div className="flex items-center gap-3">
               <Icon size={22} />

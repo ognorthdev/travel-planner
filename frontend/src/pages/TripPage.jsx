@@ -10,9 +10,9 @@ const SLOT_CONFIG = {
   HOTEL: {
     label: 'Hotel',
     icon: Hotel,
-    color: 'text-purple-600',
-    bg: 'bg-purple-50',
-    border: 'border-purple-200',
+    color: 'text-purple-400',
+    bg: 'bg-purple-900/30',
+    border: 'border-purple-700/50',
     dot: 'bg-purple-400',
     addLabel: 'Add Hotel',
     previewField: 'hotelName'
@@ -20,9 +20,9 @@ const SLOT_CONFIG = {
   BREAKFAST: {
     label: 'Breakfast',
     icon: Coffee,
-    color: 'text-amber-600',
-    bg: 'bg-amber-50',
-    border: 'border-amber-200',
+    color: 'text-amber-400',
+    bg: 'bg-amber-900/30',
+    border: 'border-amber-700/50',
     dot: 'bg-amber-400',
     addLabel: 'Add Breakfast',
     previewField: 'restaurantName'
@@ -30,9 +30,9 @@ const SLOT_CONFIG = {
   LUNCH: {
     label: 'Lunch',
     icon: Utensils,
-    color: 'text-green-600',
-    bg: 'bg-green-50',
-    border: 'border-green-200',
+    color: 'text-green-400',
+    bg: 'bg-green-900/30',
+    border: 'border-green-700/50',
     dot: 'bg-green-400',
     addLabel: 'Add Lunch',
     previewField: 'restaurantName'
@@ -40,9 +40,9 @@ const SLOT_CONFIG = {
   DINNER: {
     label: 'Dinner',
     icon: Moon,
-    color: 'text-indigo-600',
-    bg: 'bg-indigo-50',
-    border: 'border-indigo-200',
+    color: 'text-indigo-400',
+    bg: 'bg-indigo-900/30',
+    border: 'border-indigo-700/50',
     dot: 'bg-indigo-400',
     addLabel: 'Add Dinner',
     previewField: 'restaurantName'
@@ -50,9 +50,9 @@ const SLOT_CONFIG = {
   ACTIVITY: {
     label: 'Activity',
     icon: Sun,
-    color: 'text-teal-600',
-    bg: 'bg-teal-50',
-    border: 'border-teal-200',
+    color: 'text-teal-400',
+    bg: 'bg-teal-900/30',
+    border: 'border-teal-700/50',
     dot: 'bg-teal-400',
     addLabel: 'Add Activity',
     previewField: 'activityName'
@@ -68,8 +68,13 @@ const DEFAULT_DAY_SLOTS = [
   { type: 'DINNER', sortOrder: 9 }
 ];
 
+function parseLocalDate(dateStr) {
+  // Append time to force local timezone parsing instead of UTC
+  return new Date(dateStr.slice(0, 10) + 'T00:00:00');
+}
+
 function formatDate(dateStr) {
-  const date = new Date(dateStr);
+  const date = parseLocalDate(dateStr);
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
@@ -92,10 +97,10 @@ function SlotCard({ slot, dayId, tripId, onDelete }) {
   return (
     <div
       onClick={handleClick}
-      className={`group relative rounded-xl border ${config.border} ${config.bg} p-3 cursor-pointer hover:shadow-md transition-all duration-200 hover:-translate-y-0.5`}
+      className={`group relative rounded-xl border ${config.border} ${config.bg} p-3 cursor-pointer hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5`}
     >
       <div className="flex items-center gap-2">
-        <div className={`w-7 h-7 rounded-lg flex items-center justify-center bg-white shadow-sm flex-shrink-0`}>
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-700 shadow-sm flex-shrink-0">
           <Icon size={14} className={config.color} />
         </div>
         <div className="flex-1 min-w-0">
@@ -103,11 +108,11 @@ function SlotCard({ slot, dayId, tripId, onDelete }) {
             {config.label}
           </p>
           {!isEmpty ? (
-            <p className="text-sm font-medium text-slate-700 truncate mt-0.5">
+            <p className="text-sm font-medium text-slate-200 truncate mt-0.5">
               {preview}
             </p>
           ) : (
-            <p className="text-sm text-slate-400 mt-0.5">
+            <p className="text-sm text-slate-500 mt-0.5">
               {config.addLabel}
             </p>
           )}
@@ -126,14 +131,14 @@ function SlotCard({ slot, dayId, tripId, onDelete }) {
   );
 }
 
-function DayColumn({ day, tripId, trip, onAddSlot, onDeleteSlot, onDeleteDay }) {
+function DayColumn({ day, tripId, onAddSlot, onDeleteSlot, onDeleteDay }) {
   const [showAddSlot, setShowAddSlot] = useState(false);
   const slotTypes = ['BREAKFAST', 'LUNCH', 'DINNER', 'ACTIVITY', 'HOTEL'];
 
   return (
-    <div className="flex-shrink-0 w-64 bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+    <div className="flex-shrink-0 w-64 bg-slate-800 rounded-2xl border border-slate-700 shadow-sm overflow-hidden">
       {/* Day Header */}
-      <div className="bg-gradient-to-r from-ocean-500 to-teal-500 p-4 text-white relative">
+      <div className="bg-gradient-to-r from-ocean-600 to-teal-600 p-4 text-white relative">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-ocean-100 text-xs font-semibold uppercase tracking-widest">
@@ -164,13 +169,13 @@ function DayColumn({ day, tripId, trip, onAddSlot, onDeleteSlot, onDeleteDay }) 
             />
           ))
         ) : (
-          <p className="text-center text-slate-400 text-sm py-4">No slots yet</p>
+          <p className="text-center text-slate-500 text-sm py-4">No slots yet</p>
         )}
 
         {/* Add Slot */}
         {showAddSlot ? (
-          <div className="bg-slate-50 rounded-xl border border-slate-200 p-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 px-1">
+          <div className="bg-slate-700/50 rounded-xl border border-slate-600 p-2">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">
               Add Slot Type
             </p>
             <div className="space-y-1">
@@ -181,17 +186,17 @@ function DayColumn({ day, tripId, trip, onAddSlot, onDeleteSlot, onDeleteDay }) 
                   <button
                     key={type}
                     onClick={() => { onAddSlot(day.id, type); setShowAddSlot(false); }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:${config.bg} transition-colors text-left`}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-600 transition-colors text-left"
                   >
                     <Icon size={14} className={config.color} />
-                    <span className="text-sm font-medium text-slate-700">{config.label}</span>
+                    <span className="text-sm font-medium text-slate-200">{config.label}</span>
                   </button>
                 );
               })}
             </div>
             <button
               onClick={() => setShowAddSlot(false)}
-              className="w-full mt-2 text-xs text-slate-400 hover:text-slate-600 py-1"
+              className="w-full mt-2 text-xs text-slate-500 hover:text-slate-300 py-1"
             >
               Cancel
             </button>
@@ -199,7 +204,7 @@ function DayColumn({ day, tripId, trip, onAddSlot, onDeleteSlot, onDeleteDay }) 
         ) : (
           <button
             onClick={() => setShowAddSlot(true)}
-            className="w-full border-2 border-dashed border-slate-200 rounded-xl py-3 flex items-center justify-center gap-2 text-slate-400 hover:text-ocean-500 hover:border-ocean-300 transition-all duration-200 text-sm font-medium"
+            className="w-full border-2 border-dashed border-slate-600 rounded-xl py-3 flex items-center justify-center gap-2 text-slate-500 hover:text-ocean-400 hover:border-ocean-500 transition-all duration-200 text-sm font-medium"
           >
             <Plus size={16} />
             Add Slot
@@ -212,15 +217,15 @@ function DayColumn({ day, tripId, trip, onAddSlot, onDeleteSlot, onDeleteDay }) 
 
 function DeleteConfirmModal({ title, message, onConfirm, onCancel }) {
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-slide-up p-6">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm animate-slide-up p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-            <AlertTriangle size={20} className="text-red-600" />
+          <div className="w-10 h-10 rounded-full bg-red-900/50 flex items-center justify-center">
+            <AlertTriangle size={20} className="text-red-400" />
           </div>
-          <h3 className="font-bold text-slate-800 text-lg">{title}</h3>
+          <h3 className="font-bold text-slate-100 text-lg">{title}</h3>
         </div>
-        <p className="text-slate-600 mb-6">{message}</p>
+        <p className="text-slate-400 mb-6">{message}</p>
         <div className="flex gap-3">
           <button onClick={onCancel} className="btn-secondary flex-1 justify-center">Cancel</button>
           <button onClick={onConfirm} className="btn-danger flex-1 justify-center">Delete</button>
@@ -354,10 +359,10 @@ export default function TripPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 size={40} className="animate-spin text-ocean-400" />
-          <p className="text-slate-500 font-medium">Loading trip details...</p>
+          <p className="text-slate-400 font-medium">Loading trip details...</p>
         </div>
       </div>
     );
@@ -365,11 +370,11 @@ export default function TripPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl p-8 text-center shadow-sm max-w-md w-full">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 text-center shadow-sm max-w-md w-full">
           <div className="text-4xl mb-3">⚠️</div>
-          <h3 className="font-bold text-slate-800 text-lg mb-2">Error Loading Trip</h3>
-          <p className="text-slate-500 mb-4">{error}</p>
+          <h3 className="font-bold text-slate-100 text-lg mb-2">Error Loading Trip</h3>
+          <p className="text-slate-400 mb-4">{error}</p>
           <button onClick={() => navigate('/')} className="btn-secondary mx-auto">
             <ArrowLeft size={16} />
             Back to Home
@@ -380,20 +385,20 @@ export default function TripPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-900 flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-100 shadow-sm sticky top-0 z-10">
+      <header className="bg-slate-800 border-b border-slate-700 shadow-sm sticky top-0 z-10">
         <div className="max-w-full px-4 sm:px-6">
           <div className="flex items-center gap-4 h-16">
             <button
               onClick={() => navigate('/')}
-              className="p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-600"
+              className="p-2 rounded-full hover:bg-slate-700 transition-colors text-slate-400"
             >
               <ArrowLeft size={20} />
             </button>
 
             <div className="flex-1 min-w-0">
-              <h1 className="font-bold text-lg text-slate-800 truncate">{trip?.name}</h1>
+              <h1 className="font-bold text-lg text-slate-100 truncate">{trip?.name}</h1>
               <div className="flex items-center gap-3 text-sm text-slate-400">
                 <span className="flex items-center gap-1">
                   <MapPin size={12} className="text-teal-500" />
@@ -401,9 +406,9 @@ export default function TripPage() {
                 </span>
                 <span className="flex items-center gap-1">
                   <Calendar size={12} className="text-ocean-400" />
-                  {trip && new Date(trip.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {trip && parseLocalDate(trip.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   {' – '}
-                  {trip && new Date(trip.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {trip && parseLocalDate(trip.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </span>
               </div>
             </div>
@@ -423,7 +428,7 @@ export default function TripPage() {
               </button>
               <button
                 onClick={handleDeleteTrip}
-                className="p-2 rounded-full hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+                className="p-2 rounded-full hover:bg-red-900/30 text-slate-500 hover:text-red-400 transition-colors"
                 title="Delete trip"
               >
                 <Trash2 size={18} />
@@ -439,7 +444,7 @@ export default function TripPage() {
           <div className="flex items-center justify-center h-full min-h-[60vh]">
             <div className="text-center">
               <div className="text-6xl mb-4">🗓️</div>
-              <h3 className="text-xl font-bold text-slate-700 mb-2">No days planned yet</h3>
+              <h3 className="text-xl font-bold text-slate-200 mb-2">No days planned yet</h3>
               <p className="text-slate-400 mb-6">Add your first day to start planning your trip</p>
               <button onClick={handleAddDay} disabled={addingDay} className="btn-primary mx-auto">
                 {addingDay ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
@@ -458,7 +463,6 @@ export default function TripPage() {
                 key={day.id}
                 day={day}
                 tripId={tripId}
-                trip={trip}
                 onAddSlot={handleAddSlot}
                 onDeleteSlot={handleDeleteSlot}
                 onDeleteDay={handleDeleteDay}
@@ -470,7 +474,7 @@ export default function TripPage() {
               <button
                 onClick={handleAddDay}
                 disabled={addingDay}
-                className="w-full h-48 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-3 text-slate-400 hover:text-ocean-500 hover:border-ocean-300 transition-all duration-200 bg-white/50 hover:bg-white"
+                className="w-full h-48 border-2 border-dashed border-slate-700 rounded-2xl flex flex-col items-center justify-center gap-3 text-slate-500 hover:text-ocean-400 hover:border-ocean-600 transition-all duration-200 bg-slate-800/50 hover:bg-slate-800"
               >
                 {addingDay ? (
                   <Loader2 size={24} className="animate-spin" />

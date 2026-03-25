@@ -44,9 +44,13 @@ const CARD_GRADIENTS = [
   'from-cyan-400 to-blue-500'
 ];
 
+function parseLocalDate(dateStr) {
+  return new Date(dateStr.slice(0, 10) + 'T00:00:00');
+}
+
 function formatDateRange(startDate, endDate) {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
   const options = { month: 'short', day: 'numeric' };
   const startStr = start.toLocaleDateString('en-US', options);
   const endStr = end.toLocaleDateString('en-US', { ...options, year: 'numeric' });
@@ -54,8 +58,8 @@ function formatDateRange(startDate, endDate) {
 }
 
 function getDaysCount(startDate, endDate) {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
   const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
   return diff;
 }
@@ -74,28 +78,28 @@ function TripCard({ trip, index, onClick }) {
         <span className="text-7xl group-hover:scale-110 transition-transform duration-300 select-none">
           {emoji}
         </span>
-        <div className="absolute inset-0 bg-black/10 group-hover:bg-black/5 transition-colors duration-300" />
-        <div className="absolute top-3 right-3 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1 text-white text-xs font-semibold">
+        <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors duration-300" />
+        <div className="absolute top-3 right-3 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1 text-white text-xs font-semibold">
           {days} {days === 1 ? 'day' : 'days'}
         </div>
       </div>
       <div className="p-5">
-        <h3 className="font-bold text-lg text-slate-800 mb-1 group-hover:text-ocean-600 transition-colors duration-200">
+        <h3 className="font-bold text-lg text-slate-100 mb-1 group-hover:text-ocean-400 transition-colors duration-200">
           {trip.name}
         </h3>
-        <div className="flex items-center gap-1 text-slate-500 mb-3">
-          <MapPin size={14} className="text-teal-500 flex-shrink-0" />
+        <div className="flex items-center gap-1 text-slate-400 mb-3">
+          <MapPin size={14} className="text-teal-400 flex-shrink-0" />
           <span className="text-sm">{trip.destination}</span>
         </div>
-        <div className="flex items-center gap-1 text-slate-400">
+        <div className="flex items-center gap-1 text-slate-500">
           <Calendar size={14} className="text-ocean-400 flex-shrink-0" />
           <span className="text-xs">{formatDateRange(trip.startDate, trip.endDate)}</span>
         </div>
-        <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-          <span className="text-xs text-slate-400">
+        <div className="mt-3 pt-3 border-t border-slate-700 flex items-center justify-between">
+          <span className="text-xs text-slate-500">
             {trip._count?.days || 0} {trip._count?.days === 1 ? 'day planned' : 'days planned'}
           </span>
-          <span className="text-xs font-semibold text-ocean-500 group-hover:text-ocean-600">
+          <span className="text-xs font-semibold text-ocean-400 group-hover:text-ocean-300">
             View trip →
           </span>
         </div>
@@ -139,18 +143,18 @@ function NewTripModal({ onClose, onCreated }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slide-up">
-        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md animate-slide-up border border-slate-700">
+        <div className="flex items-center justify-between p-6 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-ocean-400 to-teal-500 flex items-center justify-center">
               <Plane size={18} className="text-white" />
             </div>
-            <h2 className="text-xl font-bold text-slate-800">Plan a New Trip</h2>
+            <h2 className="text-xl font-bold text-slate-100">Plan a New Trip</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-500"
+            className="p-2 rounded-full hover:bg-slate-700 transition-colors text-slate-400"
           >
             <X size={20} />
           </button>
@@ -158,7 +162,7 @@ function NewTripModal({ onClose, onCreated }) {
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">
+            <div className="bg-red-900/40 border border-red-700 rounded-lg px-4 py-3 text-red-300 text-sm">
               {error}
             </div>
           )}
@@ -263,9 +267,9 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-ocean-50">
+    <div className="min-h-screen bg-slate-900">
       {/* Header */}
-      <header className="bg-white border-b border-slate-100 shadow-sm sticky top-0 z-10">
+      <header className="bg-slate-800 border-b border-slate-700 shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
@@ -273,7 +277,7 @@ export default function HomePage() {
                 <Plane size={18} className="text-white" />
               </div>
               <div>
-                <h1 className="font-bold text-slate-800 text-lg leading-tight">Travel Planner</h1>
+                <h1 className="font-bold text-slate-100 text-lg leading-tight">Travel Planner</h1>
                 <p className="text-xs text-slate-400 leading-tight">Plan your adventures</p>
               </div>
             </div>
@@ -295,7 +299,7 @@ export default function HomePage() {
             <h2 className="text-4xl font-extrabold mb-3 leading-tight">
               Your next adventure<br />starts here ✈️
             </h2>
-            <p className="text-ocean-100 text-lg">
+            <p className="text-ocean-200 text-lg">
               Plan every detail of your trips — meals, activities, hotels, and more.
               All in one beautifully organized planner.
             </p>
@@ -315,10 +319,10 @@ export default function HomePage() {
         )}
 
         {error && !loading && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center">
+          <div className="bg-red-900/30 border border-red-700 rounded-2xl p-8 text-center">
             <div className="text-4xl mb-3">⚠️</div>
-            <h3 className="font-bold text-red-800 text-lg mb-2">Connection Error</h3>
-            <p className="text-red-600 mb-4">{error}</p>
+            <h3 className="font-bold text-red-300 text-lg mb-2">Connection Error</h3>
+            <p className="text-red-400 mb-4">{error}</p>
             <button onClick={loadTrips} className="btn-primary mx-auto">
               Try Again
             </button>
@@ -328,7 +332,7 @@ export default function HomePage() {
         {!loading && !error && (
           <>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-slate-800">
+              <h2 className="text-xl font-bold text-slate-100">
                 {trips.length > 0 ? `Your Trips (${trips.length})` : 'Your Trips'}
               </h2>
             </div>
@@ -346,16 +350,16 @@ export default function HomePage() {
               {/* Add New Trip Card */}
               <div
                 onClick={() => setShowModal(true)}
-                className="card cursor-pointer group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-2 border-dashed border-slate-200 hover:border-ocean-300 min-h-[300px] flex flex-col items-center justify-center gap-4"
+                className="cursor-pointer group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 rounded-2xl border-2 border-dashed border-slate-600 hover:border-ocean-500 min-h-[300px] flex flex-col items-center justify-center gap-4 bg-slate-800/50"
               >
-                <div className="w-16 h-16 rounded-full bg-ocean-50 group-hover:bg-ocean-100 transition-colors flex items-center justify-center">
-                  <Plus size={32} className="text-ocean-400 group-hover:text-ocean-500 transition-colors" />
+                <div className="w-16 h-16 rounded-full bg-slate-700 group-hover:bg-ocean-900/50 transition-colors flex items-center justify-center">
+                  <Plus size={32} className="text-ocean-400 group-hover:text-ocean-300 transition-colors" />
                 </div>
                 <div className="text-center">
-                  <p className="font-semibold text-slate-600 group-hover:text-ocean-600 transition-colors">
+                  <p className="font-semibold text-slate-300 group-hover:text-ocean-400 transition-colors">
                     Add New Trip
                   </p>
-                  <p className="text-sm text-slate-400 mt-1">
+                  <p className="text-sm text-slate-500 mt-1">
                     Start planning your adventure
                   </p>
                 </div>
@@ -364,7 +368,7 @@ export default function HomePage() {
 
             {trips.length === 0 && (
               <div className="text-center py-8">
-                <p className="text-slate-400 text-lg">
+                <p className="text-slate-500 text-lg">
                   No trips yet. Click the card above to plan your first adventure!
                 </p>
               </div>
