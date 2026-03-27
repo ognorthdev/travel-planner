@@ -23,11 +23,11 @@ try {
   console.warn('Google Generative AI SDK not available');
 }
 
-async function askClaude(prompt) {
+async function askClaude(prompt, maxTokens = 1024) {
   if (!anthropic) throw new Error('Anthropic API key not configured');
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
+    max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }]
   });
   return message.content[0].text;
@@ -35,7 +35,7 @@ async function askClaude(prompt) {
 
 async function askGemini(prompt) {
   if (!genAI) throw new Error('Gemini API key not configured');
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   const result = await model.generateContent(prompt);
   return result.response.text();
 }
@@ -283,17 +283,20 @@ Return ONLY a valid JSON object, no markdown:
   ]
 }`;
 
+    const cleanJson = (text) => text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
     let data;
     try {
       const text = await askGemini(prompt);
-      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      data = JSON.parse(cleaned);
+      data = JSON.parse(cleanJson(text));
     } catch (e) {
+      console.error('Gemini discover failed:', e.message);
       // Fallback to Claude if Gemini fails
       try {
-        const text = await askClaude(prompt);
-        data = JSON.parse(text);
+        const text = await askClaude(prompt, 4096);
+        data = JSON.parse(cleanJson(text));
       } catch (e2) {
+        console.error('Claude discover failed:', e2.message);
         return res.status(500).json({ error: 'Failed to get discovery results. Please try again.' });
       }
     }
