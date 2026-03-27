@@ -26,7 +26,7 @@ try {
 async function askClaude(prompt) {
   if (!anthropic) throw new Error('Anthropic API key not configured');
   const message = await anthropic.messages.create({
-    model: 'claude-opus-4-5',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }]
   });
@@ -216,6 +216,89 @@ Respond with a JSON object (no markdown, pure JSON) with these fields:
     }
 
     res.json({ suggestion, source });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/ai/discover - Discover restaurants or activities near a location
+router.post('/discover', async (req, res, next) => {
+  try {
+    const { location, slotType, description, destination } = req.body;
+    if (!location || !slotType || !destination) {
+      return res.status(400).json({ error: 'location, slotType, and destination are required' });
+    }
+
+    const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slotType);
+    const mealLabel = slotType === 'BREAKFAST' ? 'Breakfast' : slotType === 'LUNCH' ? 'Lunch' : 'Dinner';
+
+    const prompt = isMeal
+      ? `You are a local food expert for ${destination}. A traveler is at or near: "${location}".
+They want ${mealLabel} options.${description ? ` Their preferences: ${description}` : ''}
+
+Find 6-8 restaurants within 10 minutes walking distance. Only include restaurants with at least 3.5 star rating. Make the data realistic and specific to ${destination}.
+
+Return ONLY a valid JSON object, no markdown:
+{
+  "startLocation": { "lat": <number>, "lng": <number>, "address": "${location}" },
+  "results": [
+    {
+      "name": "restaurant name",
+      "address": "full street address in ${destination}",
+      "lat": <number>,
+      "lng": <number>,
+      "rating": <number 3.5-5.0>,
+      "reviewCount": <number 50-5000>,
+      "walkMinutes": <number 1-10>,
+      "cuisine": "cuisine type",
+      "priceRange": "$ or $$ or $$$ or $$$$",
+      "reason": "2 sentence explanation of why recommended",
+      "highlights": "one key highlight or must-try dish"
+    }
+  ]
+}`
+      : `You are a local travel expert for ${destination}. A traveler is at or near: "${location}".
+They want activity suggestions.${description ? ` Their preferences: ${description}` : ''}
+
+Find 6-8 activities/attractions within 30 minutes by transit. Only include places with at least 3.5 star rating. Make the data realistic and specific to ${destination}.
+
+Return ONLY a valid JSON object, no markdown:
+{
+  "startLocation": { "lat": <number>, "lng": <number>, "address": "${location}" },
+  "results": [
+    {
+      "name": "place or activity name",
+      "address": "full street address in ${destination}",
+      "lat": <number>,
+      "lng": <number>,
+      "rating": <number 3.5-5.0>,
+      "reviewCount": <number 50-10000>,
+      "walkMinutes": <number 1-40>,
+      "transitMinutes": <number 1-30>,
+      "category": "activity category",
+      "duration": "suggested visit duration",
+      "reason": "2 sentence explanation of why recommended",
+      "highlights": "one key highlight"
+    }
+  ]
+}`;
+
+    let data;
+    try {
+      const text = await askGemini(prompt);
+      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      data = JSON.parse(cleaned);
+    } catch (e) {
+      // Fallback to Claude if Gemini fails
+      try {
+        const text = await askClaude(prompt);
+        data = JSON.parse(text);
+      } catch (e2) {
+        return res.status(500).json({ error: 'Failed to get discovery results. Please try again.' });
+      }
+    }
+
+    res.json(data);
   } catch (err) {
     next(err);
   }

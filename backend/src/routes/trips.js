@@ -125,4 +125,35 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
+// GET /api/trips/:id/locations - Get all filled hotel/activity locations for address dropdown
+router.get('/:id/locations', async (req, res, next) => {
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: req.params.id },
+      include: {
+        days: {
+          orderBy: { dayNumber: 'asc' },
+          include: { slots: { where: { type: { in: ['HOTEL', 'ACTIVITY'] } } } }
+        }
+      }
+    });
+    if (!trip) return res.status(404).json({ error: 'Trip not found' });
+
+    const locations = [];
+    for (const day of trip.days) {
+      for (const slot of day.slots) {
+        const data = typeof slot.data === 'string' ? JSON.parse(slot.data) : (slot.data || {});
+        if (slot.type === 'HOTEL' && data.hotelName && data.address) {
+          locations.push({ label: data.hotelName, address: data.address, type: 'hotel', dayNumber: day.dayNumber });
+        } else if (slot.type === 'ACTIVITY' && data.activityName && data.location) {
+          locations.push({ label: data.activityName, address: data.location, type: 'activity', dayNumber: day.dayNumber });
+        }
+      }
+    }
+    res.json(locations);
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

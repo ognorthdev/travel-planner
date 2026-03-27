@@ -5,7 +5,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json'
   },
-  timeout: 15000
+  timeout: 30000
 });
 
 // Request interceptor
@@ -54,7 +54,12 @@ export const slotsApi = {
 export const aiApi = {
   suggestMeal: (data) => api.post('/ai/suggest-meal', data),
   suggestActivity: (data) => api.post('/ai/suggest-activity', data),
-  searchHotel: (data) => api.post('/ai/search-hotel', data)
+  searchHotel: (data) => api.post('/ai/search-hotel', data),
+  discover: (data) => api.post('/ai/discover', data),
+};
+
+export const locationsApi = {
+  getByTrip: (tripId) => api.get(`/trips/${tripId}/locations`)
 };
 
 export default api;
