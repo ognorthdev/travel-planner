@@ -4,11 +4,11 @@ import {
   ArrowLeft, Save, Loader2, Wand2, Hotel, Coffee, Moon, Utensils,
   Sun, MapPin, Clock, DollarSign, FileText, Phone, Hash, Check,
   Star, Info, ChevronDown, ChevronUp, Search, Heart, Navigation,
-  Bus, Footprints
+  Bus, Footprints, Car
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { slotsApi, tripsApi, aiApi, locationsApi } from '../api/index.js';
+import { slotsApi, tripsApi, aiApi, locationsApi, placesApi } from '../api/index.js';
 
 // Fix Leaflet default icon issue with bundlers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -75,19 +75,21 @@ function StarRating({ rating, reviewCount }) {
   );
 }
 
-function DiscoveryPhase({ tripId, slotType, destination, trip }) {
+function DiscoveryPhase({ tripId, slotType, destination }) {
   const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slotType);
 
   const [locationInput, setLocationInput] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [planLocations, setPlanLocations] = useState([]);
+  const [googlePredictions, setGooglePredictions] = useState([]);
   const [description, setDescription] = useState('');
   const [discovering, setDiscovering] = useState(false);
-  const [results, setResults] = useState(null); // { startLocation, results[] }
+  const [results, setResults] = useState(null);
   const [favorites, setFavorites] = useState(new Set());
   const [error, setError] = useState('');
   const locationInputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const autocompleteTimer = useRef(null);
 
   // Load plan locations for dropdown
   useEffect(() => {
@@ -105,6 +107,24 @@ function DiscoveryPhase({ tripId, slotType, destination, trip }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Debounced Google Places autocomplete
+  useEffect(() => {
+    if (autocompleteTimer.current) clearTimeout(autocompleteTimer.current);
+    if (locationInput.trim().length < 3) {
+      setGooglePredictions([]);
+      return;
+    }
+    autocompleteTimer.current = setTimeout(async () => {
+      try {
+        const data = await placesApi.autocomplete(locationInput);
+        setGooglePredictions(data.predictions || []);
+      } catch {
+        setGooglePredictions([]);
+      }
+    }, 300);
+    return () => { if (autocompleteTimer.current) clearTimeout(autocompleteTimer.current); };
+  }, [locationInput]);
+
   const filteredLocations = planLocations.filter(loc =>
     loc.label.toLowerCase().includes(locationInput.toLowerCase()) ||
     loc.address.toLowerCase().includes(locationInput.toLowerCase())
@@ -117,6 +137,7 @@ function DiscoveryPhase({ tripId, slotType, destination, trip }) {
     }
     setDiscovering(true);
     setError('');
+    setResults(null);
     try {
       const data = await aiApi.discover({
         location: locationInput,
@@ -124,7 +145,11 @@ function DiscoveryPhase({ tripId, slotType, destination, trip }) {
         description,
         destination
       });
-      setResults(data);
+      if (data && data.startLocation && Array.isArray(data.results)) {
+        setResults(data);
+      } else {
+        setError('Received unexpected data format. Please try again.');
+      }
     } catch (err) {
       setError(err.message || 'Failed to get results. Please try again.');
     } finally {
@@ -148,6 +173,8 @@ function DiscoveryPhase({ tripId, slotType, destination, trip }) {
       ]
     : null;
 
+  const showDropdown = dropdownOpen && (filteredLocations.length > 0 || googlePredictions.length > 0 || locationInput === '');
+
   return (
     <div className="space-y-5">
       {/* Location Input */}
@@ -170,31 +197,62 @@ function DiscoveryPhase({ tripId, slotType, destination, trip }) {
             />
           </div>
 
-          {dropdownOpen && (filteredLocations.length > 0 || locationInput === '') && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-slate-700 border border-slate-600 rounded-xl shadow-2xl z-20 overflow-hidden">
-              {planLocations.length > 0 && (
-                <div className="px-3 pt-2 pb-1">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">From your plan</p>
-                </div>
+          {showDropdown && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-slate-700 border border-slate-600 rounded-xl shadow-2xl z-20 overflow-hidden max-h-72 overflow-y-auto">
+              {/* Plan locations */}
+              {filteredLocations.length > 0 && (
+                <>
+                  <div className="px-3 pt-2 pb-1">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">From your plan</p>
+                  </div>
+                  {filteredLocations.map((loc, i) => (
+                    <button
+                      key={`plan-${i}`}
+                      onClick={() => { setLocationInput(loc.address); setDropdownOpen(false); setGooglePredictions([]); }}
+                      className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-slate-600 transition-colors text-left"
+                    >
+                      <div className={`mt-0.5 w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${loc.type === 'hotel' ? 'bg-purple-900/50' : 'bg-teal-900/50'}`}>
+                        {loc.type === 'hotel' ? <Hotel size={12} className="text-purple-400" /> : <Sun size={12} className="text-teal-400" />}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-200 truncate">{loc.label}</p>
+                        <p className="text-xs text-slate-400 truncate">{loc.address} · Day {loc.dayNumber}</p>
+                      </div>
+                    </button>
+                  ))}
+                </>
               )}
-              {filteredLocations.map((loc, i) => (
-                <button
-                  key={i}
-                  onClick={() => { setLocationInput(loc.address); setDropdownOpen(false); }}
-                  className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-slate-600 transition-colors text-left"
-                >
-                  <div className={`mt-0.5 w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${loc.type === 'hotel' ? 'bg-purple-900/50' : 'bg-teal-900/50'}`}>
-                    {loc.type === 'hotel' ? <Hotel size={12} className="text-purple-400" /> : <Sun size={12} className="text-teal-400" />}
+
+              {/* Google Places suggestions */}
+              {googlePredictions.length > 0 && (
+                <>
+                  <div className="px-3 pt-2 pb-1">
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Google suggestions</p>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-200 truncate">{loc.label}</p>
-                    <p className="text-xs text-slate-400 truncate">{loc.address} · Day {loc.dayNumber}</p>
-                  </div>
-                </button>
-              ))}
-              {planLocations.length === 0 && (
+                  {googlePredictions.map((pred, i) => (
+                    <button
+                      key={`google-${i}`}
+                      onClick={() => { setLocationInput(pred.description); setDropdownOpen(false); setGooglePredictions([]); }}
+                      className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-slate-600 transition-colors text-left"
+                    >
+                      <div className="mt-0.5 w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 bg-blue-900/50">
+                        <MapPin size={12} className="text-blue-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-200 truncate">{pred.mainText}</p>
+                        <p className="text-xs text-slate-400 truncate">{pred.secondaryText}</p>
+                      </div>
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {/* Empty state */}
+              {filteredLocations.length === 0 && googlePredictions.length === 0 && (
                 <div className="px-3 py-3 text-sm text-slate-400">
-                  No hotel or activity locations in your plan yet. Type an address manually.
+                  {locationInput.trim().length < 3
+                    ? 'Type at least 3 characters to search for an address...'
+                    : 'No hotel or activity locations in your plan yet. Type an address manually.'}
                 </div>
               )}
             </div>
@@ -267,7 +325,7 @@ function DiscoveryPhase({ tripId, slotType, destination, trip }) {
               <MapFitter bounds={mapBounds} />
               <Marker position={[results.startLocation.lat, results.startLocation.lng]} icon={startIcon}>
                 <Popup>
-                  <div className="text-sm font-semibold">📍 Starting Point</div>
+                  <div className="text-sm font-semibold">Starting Point</div>
                   <div className="text-xs text-gray-600">{results.startLocation.address}</div>
                 </Popup>
               </Marker>
@@ -276,7 +334,12 @@ function DiscoveryPhase({ tripId, slotType, destination, trip }) {
                   <Popup>
                     <div className="text-sm font-semibold">{r.name}</div>
                     <div className="text-xs text-gray-600">{r.address}</div>
-                    <div className="text-xs mt-1">⭐ {r.rating} · {isMeal ? `${r.walkMinutes} min walk` : `${r.transitMinutes} min transit`}</div>
+                    <div className="text-xs mt-1">
+                      {r.rating} stars
+                      {r.walkMinutes && ` · ${r.walkMinutes} min walk`}
+                      {r.transitMinutes && ` · ${r.transitMinutes} min transit`}
+                      {r.driveMinutes && ` · ${r.driveMinutes} min drive`}
+                    </div>
                   </Popup>
                 </Marker>
               ))}
@@ -316,8 +379,8 @@ function DiscoveryPhase({ tripId, slotType, destination, trip }) {
                       <span className="text-xs">{result.address}</span>
                     </div>
 
-                    {/* Travel time */}
-                    <div className="flex items-center gap-3 mt-2">
+                    {/* Travel times */}
+                    <div className="flex items-center gap-3 mt-2 flex-wrap">
                       {result.walkMinutes && (
                         <div className="flex items-center gap-1 text-ocean-400">
                           <Footprints size={12} />
@@ -330,24 +393,16 @@ function DiscoveryPhase({ tripId, slotType, destination, trip }) {
                           <span className="text-xs font-medium">{result.transitMinutes} min transit</span>
                         </div>
                       )}
-                      {result.duration && (
-                        <div className="flex items-center gap-1 text-slate-400">
-                          <Clock size={12} />
-                          <span className="text-xs">{result.duration}</span>
+                      {result.driveMinutes && (
+                        <div className="flex items-center gap-1 text-violet-400">
+                          <Car size={12} />
+                          <span className="text-xs font-medium">{result.driveMinutes} min drive</span>
                         </div>
                       )}
                     </div>
 
                     {/* Reason */}
                     <p className="text-sm text-slate-300 mt-3 leading-relaxed">{result.reason}</p>
-
-                    {/* Highlight */}
-                    {result.highlights && (
-                      <div className="mt-2 flex items-start gap-1.5">
-                        <Star size={12} className="text-amber-400 flex-shrink-0 mt-0.5" />
-                        <p className="text-xs text-amber-300">{result.highlights}</p>
-                      </div>
-                    )}
                   </div>
 
                   {/* Favorite button */}
@@ -806,7 +861,6 @@ export default function PlanningPage() {
             tripId={tripId}
             slotType={slotType}
             destination={destination}
-            trip={trip}
           />
         )}
 

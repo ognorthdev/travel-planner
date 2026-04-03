@@ -233,57 +233,79 @@ router.post('/discover', async (req, res, next) => {
     const mealLabel = slotType === 'BREAKFAST' ? 'Breakfast' : slotType === 'LUNCH' ? 'Lunch' : 'Dinner';
 
     const prompt = isMeal
-      ? `You are a local food expert for ${destination}. A traveler is at or near: "${location}".
+      ? `You are a local food expert with deep knowledge of Google Maps restaurant data for ${destination}. A traveler is at or near: "${location}".
 They want ${mealLabel} options.${description ? ` Their preferences: ${description}` : ''}
 
-Find 6-8 restaurants within 10 minutes walking distance. Only include restaurants with at least 3.5 star rating. Make the data realistic and specific to ${destination}.
+Find 6-8 real restaurants that are reachable within a 10 minute walk, 10 minute transit ride, or 5 minute drive from the starting location. Include a mix of transport options. Only include restaurants you are confident actually exist, with at least 3.5 star rating on Google Maps.
 
-Return ONLY a valid JSON object, no markdown:
+For each restaurant, provide:
+- The real business name and full street address
+- Accurate Google Maps star rating and approximate review count
+- How long it takes to get there by walking, transit, and driving (include all three)
+- A short description of why this restaurant is recommended for this traveler
+
+Return ONLY a valid JSON object with no markdown formatting, no code fences, no extra text:
 {
   "startLocation": { "lat": <number>, "lng": <number>, "address": "${location}" },
   "results": [
     {
       "name": "restaurant name",
-      "address": "full street address in ${destination}",
+      "address": "full street address",
       "lat": <number>,
       "lng": <number>,
       "rating": <number 3.5-5.0>,
-      "reviewCount": <number 50-5000>,
-      "walkMinutes": <number 1-10>,
+      "reviewCount": <number>,
+      "walkMinutes": <number or null if not walkable>,
+      "transitMinutes": <number>,
+      "driveMinutes": <number>,
       "cuisine": "cuisine type",
       "priceRange": "$ or $$ or $$$ or $$$$",
-      "reason": "2 sentence explanation of why recommended",
-      "highlights": "one key highlight or must-try dish"
+      "reason": "2-3 sentence description of why this restaurant is recommended, what makes it special, and what to expect"
     }
   ]
 }`
-      : `You are a local travel expert for ${destination}. A traveler is at or near: "${location}".
+      : `You are a local travel expert with deep knowledge of Google Maps data for ${destination}. A traveler is at or near: "${location}".
 They want activity suggestions.${description ? ` Their preferences: ${description}` : ''}
 
-Find 6-8 activities/attractions within 30 minutes by transit. Only include places with at least 3.5 star rating. Make the data realistic and specific to ${destination}.
+Find 6-8 real activities/attractions reachable within a 10 minute walk, 10 minute transit ride, or 5 minute drive from the starting location. Include a mix of transport options. Only include places you are confident actually exist, with at least 3.5 star rating on Google Maps.
 
-Return ONLY a valid JSON object, no markdown:
+For each place, provide:
+- The real business/attraction name and full street address
+- Accurate Google Maps star rating and approximate review count
+- How long it takes to get there by walking, transit, and driving (include all three)
+- A short description of why this place is recommended
+
+Return ONLY a valid JSON object with no markdown formatting, no code fences, no extra text:
 {
   "startLocation": { "lat": <number>, "lng": <number>, "address": "${location}" },
   "results": [
     {
       "name": "place or activity name",
-      "address": "full street address in ${destination}",
+      "address": "full street address",
       "lat": <number>,
       "lng": <number>,
       "rating": <number 3.5-5.0>,
-      "reviewCount": <number 50-10000>,
-      "walkMinutes": <number 1-40>,
-      "transitMinutes": <number 1-30>,
+      "reviewCount": <number>,
+      "walkMinutes": <number or null if not walkable>,
+      "transitMinutes": <number>,
+      "driveMinutes": <number>,
       "category": "activity category",
       "duration": "suggested visit duration",
-      "reason": "2 sentence explanation of why recommended",
-      "highlights": "one key highlight"
+      "reason": "2-3 sentence description of why this place is recommended and what to expect"
     }
   ]
 }`;
 
-    const cleanJson = (text) => text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const cleanJson = (text) => {
+      let cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      // Find the first { and last } to extract JSON even if surrounded by text
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+      }
+      return cleaned;
+    };
 
     let data;
     try {
@@ -291,7 +313,6 @@ Return ONLY a valid JSON object, no markdown:
       data = JSON.parse(cleanJson(text));
     } catch (e) {
       console.error('Gemini discover failed:', e.message);
-      // Fallback to Claude if Gemini fails
       try {
         const text = await askClaude(prompt, 4096);
         data = JSON.parse(cleanJson(text));
@@ -299,6 +320,11 @@ Return ONLY a valid JSON object, no markdown:
         console.error('Claude discover failed:', e2.message);
         return res.status(500).json({ error: 'Failed to get discovery results. Please try again.' });
       }
+    }
+
+    // Validate the response structure
+    if (!data || !data.startLocation || !Array.isArray(data.results)) {
+      return res.status(500).json({ error: 'Received invalid data from AI. Please try again.' });
     }
 
     res.json(data);

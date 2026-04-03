@@ -6,6 +6,7 @@ const tripsRouter = require('./routes/trips');
 const daysRouter = require('./routes/days');
 const slotsRouter = require('./routes/slots');
 const aiRouter = require('./routes/ai');
+const placesRouter = require('./routes/places');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,6 +27,7 @@ app.use('/api/trips', tripsRouter);
 app.use('/api', daysRouter);
 app.use('/api', slotsRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/places', placesRouter);
 
 // Global error handler
 app.use((err, req, res, next) => {

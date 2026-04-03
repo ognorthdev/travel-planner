@@ -58,6 +58,10 @@ export const aiApi = {
   discover: (data) => api.post('/ai/discover', data),
 };
 
+export const placesApi = {
+  autocomplete: (input, locationBias) => api.post('/places/autocomplete', { input, locationBias }),
+};
+
 export const locationsApi = {
   getByTrip: (tripId) => api.get(`/trips/${tripId}/locations`)
 };
