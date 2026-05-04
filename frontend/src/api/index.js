@@ -47,7 +47,8 @@ export const slotsApi = {
   getById: (id) => api.get(`/slots/${id}`),
   create: (dayId, data) => api.post(`/days/${dayId}/slots`, data),
   update: (id, data) => api.put(`/slots/${id}`, data),
-  delete: (id) => api.delete(`/slots/${id}`)
+  delete: (id) => api.delete(`/slots/${id}`),
+  reorder: (dayId, slotIds) => api.put(`/days/${dayId}/slots/reorder`, { slotIds })
 };
 
 // AI
@@ -55,11 +56,12 @@ export const aiApi = {
   suggestMeal: (data) => api.post('/ai/suggest-meal', data),
   suggestActivity: (data) => api.post('/ai/suggest-activity', data),
   searchHotel: (data) => api.post('/ai/search-hotel', data),
-  discover: (data) => api.post('/ai/discover', data),
+  discover: (data) => api.post('/ai/discover', data, { timeout: 120000 }),
 };
 
 export const placesApi = {
   autocomplete: (input, locationBias) => api.post('/places/autocomplete', { input, locationBias }),
+  getPhotos: (name, address, placeId) => api.get('/places/photos', { params: { name, address, placeId } }),
 };
 
 export const locationsApi = {

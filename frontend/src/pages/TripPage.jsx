@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Calendar, MapPin, Loader2, Hotel, Coffee, Sun,
-  Moon, Utensils, ChevronRight, Trash2, X, AlertTriangle
+  Moon, Utensils, ChevronRight, Trash2, X, AlertTriangle, Clock, GripVertical
 } from 'lucide-react';
 import { tripsApi, daysApi, slotsApi } from '../api/index.js';
 
@@ -78,12 +78,14 @@ function formatDate(dateStr) {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-function SlotCard({ slot, dayId, tripId, onDelete }) {
+function SlotCard({ slot, dayId, tripId, onDelete, index, onDragStart, onDragOver, onDrop, draggingIndex }) {
   const navigate = useNavigate();
   const config = SLOT_CONFIG[slot.type] || SLOT_CONFIG.ACTIVITY;
   const Icon = config.icon;
   const preview = slot.data?.[config.previewField];
   const isEmpty = !preview;
+  const time = slot.data?.time;
+  const isDragging = draggingIndex === index;
 
   const handleClick = () => {
     navigate(`/trips/${tripId}/days/${dayId}/slots/${slot.id}`);
@@ -96,17 +98,35 @@ function SlotCard({ slot, dayId, tripId, onDelete }) {
 
   return (
     <div
+      draggable
+      onDragStart={(e) => onDragStart(e, index)}
+      onDragOver={(e) => onDragOver(e, index)}
+      onDrop={(e) => onDrop(e, index)}
       onClick={handleClick}
-      className={`group relative rounded-xl border ${config.border} ${config.bg} p-3 cursor-pointer hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5`}
+      className={`group relative rounded-xl border ${config.border} ${config.bg} p-3 cursor-pointer hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 ${isDragging ? 'opacity-40' : ''}`}
     >
       <div className="flex items-center gap-2">
+        <div
+          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical size={14} />
+        </div>
         <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-700 shadow-sm flex-shrink-0">
           <Icon size={14} className={config.color} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className={`text-xs font-semibold ${config.color} uppercase tracking-wide`}>
-            {config.label}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className={`text-xs font-semibold ${config.color} uppercase tracking-wide`}>
+              {config.label}
+            </p>
+            {time && (
+              <span className="flex items-center gap-0.5 text-xs text-slate-400">
+                <Clock size={10} />
+                {time}
+              </span>
+            )}
+          </div>
           {!isEmpty ? (
             <p className="text-sm font-medium text-slate-200 truncate mt-0.5">
               {preview}
@@ -131,12 +151,42 @@ function SlotCard({ slot, dayId, tripId, onDelete }) {
   );
 }
 
-function DayColumn({ day, tripId, onAddSlot, onDeleteSlot, onDeleteDay }) {
+function DayColumn({ day, tripId, onAddSlot, onDeleteSlot, onDeleteDay, onReorderSlots }) {
   const [showAddSlot, setShowAddSlot] = useState(false);
+  const [draggingIndex, setDraggingIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
   const slotTypes = ['BREAKFAST', 'LUNCH', 'DINNER', 'ACTIVITY', 'HOTEL'];
 
+  const handleDragStart = (e, index) => {
+    setDraggingIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = (e, dropIndex) => {
+    e.preventDefault();
+    if (draggingIndex !== null && draggingIndex !== dropIndex) {
+      const slots = [...(day.slots || [])];
+      const [moved] = slots.splice(draggingIndex, 1);
+      slots.splice(dropIndex, 0, moved);
+      onReorderSlots(day.id, slots);
+    }
+    setDraggingIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingIndex(null);
+    setDragOverIndex(null);
+  };
+
   return (
-    <div className="flex-shrink-0 w-64 bg-slate-800 rounded-2xl border border-slate-700 shadow-sm overflow-hidden">
+    <div className="flex-shrink-0 w-64 bg-slate-800 rounded-2xl border border-slate-700 shadow-sm overflow-hidden" onDragEnd={handleDragEnd}>
       {/* Day Header */}
       <div className="bg-gradient-to-r from-ocean-600 to-teal-600 p-4 text-white relative">
         <div className="flex items-center justify-between">
@@ -159,13 +209,18 @@ function DayColumn({ day, tripId, onAddSlot, onDeleteSlot, onDeleteDay }) {
       {/* Slots */}
       <div className="p-3 space-y-2">
         {day.slots && day.slots.length > 0 ? (
-          day.slots.map(slot => (
+          day.slots.map((slot, index) => (
             <SlotCard
               key={slot.id}
               slot={slot}
               dayId={day.id}
               tripId={tripId}
               onDelete={onDeleteSlot}
+              index={index}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              draggingIndex={draggingIndex}
             />
           ))
         ) : (
@@ -303,6 +358,19 @@ export default function TripPage() {
       ));
     } catch (err) {
       console.error('Failed to add slot:', err);
+    }
+  };
+
+  const handleReorderSlots = async (dayId, reorderedSlots) => {
+    const slotIds = reorderedSlots.map(s => s.id);
+    setDays(prev => prev.map(day =>
+      day.id === dayId ? { ...day, slots: reorderedSlots } : day
+    ));
+    try {
+      await slotsApi.reorder(dayId, slotIds);
+    } catch (err) {
+      console.error('Failed to reorder slots:', err);
+      loadTripData();
     }
   };
 
@@ -466,6 +534,7 @@ export default function TripPage() {
                 onAddSlot={handleAddSlot}
                 onDeleteSlot={handleDeleteSlot}
                 onDeleteDay={handleDeleteDay}
+                onReorderSlots={handleReorderSlots}
               />
             ))}
 

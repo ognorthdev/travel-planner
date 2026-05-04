@@ -127,6 +127,44 @@ router.put('/slots/:id', async (req, res, next) => {
   }
 });
 
+// PUT /api/days/:dayId/slots/reorder - Reorder slots within a day
+router.put('/days/:dayId/slots/reorder', async (req, res, next) => {
+  try {
+    const day = await prisma.day.findUnique({ where: { id: req.params.dayId } });
+    if (!day) {
+      return res.status(404).json({ error: 'Day not found' });
+    }
+
+    const { slotIds } = req.body;
+    if (!Array.isArray(slotIds)) {
+      return res.status(400).json({ error: 'slotIds must be an array' });
+    }
+
+    await prisma.$transaction(
+      slotIds.map((id, index) =>
+        prisma.slot.update({
+          where: { id },
+          data: { sortOrder: index }
+        })
+      )
+    );
+
+    const slots = await prisma.slot.findMany({
+      where: { dayId: req.params.dayId },
+      orderBy: { sortOrder: 'asc' }
+    });
+
+    const parsedSlots = slots.map(slot => ({
+      ...slot,
+      data: typeof slot.data === 'string' ? JSON.parse(slot.data) : slot.data
+    }));
+
+    res.json(parsedSlots);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/slots/:id - Delete a slot
 router.delete('/slots/:id', async (req, res, next) => {
   try {

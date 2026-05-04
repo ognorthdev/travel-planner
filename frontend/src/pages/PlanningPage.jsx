@@ -4,31 +4,232 @@ import {
   ArrowLeft, Save, Loader2, Wand2, Hotel, Coffee, Moon, Utensils,
   Sun, MapPin, Clock, DollarSign, FileText, Phone, Hash, Check,
   Star, Info, ChevronDown, ChevronUp, Search, Heart, Navigation,
-  Bus, Footprints, Car
+  Bus, Footprints, Car, UtensilsCrossed, Lightbulb, ThumbsDown,
+  ExternalLink
 } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-maps/api';
 import { slotsApi, tripsApi, aiApi, locationsApi, placesApi } from '../api/index.js';
 
-// Fix Leaflet default icon issue with bundlers
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-});
+function buildGoogleMapsUrl(name, address) {
+  return `https://www.google.com/maps/search/${encodeURIComponent(name + ', ' + address)}`;
+}
 
-// Custom icons
-const startIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
-});
-const resultIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
-});
+function getPicksKey(slotId) {
+  return `travel-planner-picks-${slotId}`;
+}
+
+function loadPicks(slotId) {
+  try {
+    const raw = localStorage.getItem(getPicksKey(slotId));
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function savePicks(slotId, picks) {
+  localStorage.setItem(getPicksKey(slotId), JSON.stringify(picks));
+}
+
+function getPlanSelectionKey(slotId) {
+  return `travel-planner-plan-selection-${slotId}`;
+}
+
+function loadPlanSelection(slotId) {
+  try {
+    const raw = localStorage.getItem(getPlanSelectionKey(slotId));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function savePlanSelection(slotId, selection) {
+  if (selection) {
+    localStorage.setItem(getPlanSelectionKey(slotId), JSON.stringify(selection));
+  } else {
+    localStorage.removeItem(getPlanSelectionKey(slotId));
+  }
+}
+
+function getDiscoveryCacheKey(slotId) {
+  return `travel-planner-discovery-${slotId}`;
+}
+
+function loadDiscoveryCache(slotId) {
+  try {
+    const raw = sessionStorage.getItem(getDiscoveryCacheKey(slotId));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function saveDiscoveryCache(slotId, data) {
+  sessionStorage.setItem(getDiscoveryCacheKey(slotId), JSON.stringify(data));
+}
+
+function ResultCard({ result, index, isFavorite, onToggleFavorite, isChecked, onToggleCheck }) {
+  return (
+    <div className={`bg-slate-800 rounded-2xl border p-4 transition-colors ${isChecked ? 'border-emerald-500/50 ring-1 ring-emerald-500/20' : 'border-slate-700 hover:border-slate-600'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">{index + 1}</span>
+            <h3 className="font-bold text-slate-100 text-base">{result.name}</h3>
+            {(result.cuisine || result.category) && (
+              <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full border border-slate-600">
+                {result.cuisine || result.category}
+              </span>
+            )}
+            {result.priceRange && (
+              <span className="text-xs text-emerald-400 font-semibold">{result.priceRange}</span>
+            )}
+          </div>
+
+          <StarRating rating={result.rating} reviewCount={result.reviewCount} />
+
+          <div className="flex items-center gap-1 mt-2 text-slate-400">
+            <MapPin size={12} className="flex-shrink-0" />
+            <span className="text-xs">{result.address}</span>
+          </div>
+
+          <a
+            href={result.googleMapsUrl || buildGoogleMapsUrl(result.name, result.address)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-xs font-medium text-ocean-400 hover:text-ocean-300 transition-colors"
+          >
+            <ExternalLink size={12} />
+            View on Google Maps
+          </a>
+
+          {result.photos && result.photos.length > 0 && (
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              {result.photos.slice(0, 4).map((photo, pi) => {
+                const labels = ['Exterior', 'Interior', 'Food', 'Food'];
+                return (
+                  <div key={pi} className="relative h-28 rounded-lg overflow-hidden bg-slate-700/50">
+                    <img
+                      src={photo.url}
+                      alt={`${result.name} - ${labels[pi] || 'Photo'}`}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <span className="absolute bottom-1 left-1 text-[10px] font-medium bg-black/60 text-white px-1.5 py-0.5 rounded">
+                      {labels[pi]}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            {result.walkMinutes && (
+              <div className="flex items-center gap-1 text-ocean-400">
+                <Footprints size={12} />
+                <span className="text-xs font-medium">{result.walkMinutes} min walk</span>
+              </div>
+            )}
+            {result.transitMinutes && (
+              <div className="flex items-center gap-1 text-teal-400">
+                <Bus size={12} />
+                <span className="text-xs font-medium">{result.transitMinutes} min transit</span>
+              </div>
+            )}
+            {result.driveMinutes && (
+              <div className="flex items-center gap-1 text-violet-400">
+                <Car size={12} />
+                <span className="text-xs font-medium">{result.driveMinutes} min drive</span>
+              </div>
+            )}
+          </div>
+
+          <p className="text-sm text-slate-300 mt-3 leading-relaxed">{result.reason}</p>
+
+          {result.topDishes && result.topDishes.length > 0 && (
+            <div className="mt-3 bg-amber-900/20 border border-amber-700/30 rounded-xl p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <UtensilsCrossed size={13} className="text-amber-400" />
+                <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Must-try dishes</p>
+              </div>
+              <div className="space-y-1.5">
+                {result.topDishes.slice(0, 3).map((dish, j) => (
+                  <div key={j} className="flex items-start gap-2">
+                    <span className="text-sm mt-0.5">🍽️</span>
+                    <div className="min-w-0">
+                      <span className="text-sm font-medium text-slate-200">{dish.name}</span>
+                      {dish.description && (
+                        <span className="text-xs text-slate-400 ml-1">— {dish.description}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {result.reviewTips && result.reviewTips.length > 0 && (
+            <div className="mt-2 bg-teal-900/20 border border-teal-700/30 rounded-xl p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Lightbulb size={13} className="text-teal-400" />
+                <p className="text-xs font-semibold text-teal-400 uppercase tracking-wide">Tips from reviews</p>
+              </div>
+              <ul className="space-y-1">
+                {result.reviewTips.slice(0, 3).map((tip, j) => (
+                  <li key={j} className="flex items-start gap-2 text-sm text-slate-300">
+                    <span className="text-teal-500 mt-1 flex-shrink-0">•</span>
+                    <span>{tip}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {result.lowRatingReasons && result.lowRatingReasons.length > 0 && (
+            <div className="mt-2 bg-red-900/15 border border-red-700/30 rounded-xl p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <ThumbsDown size={13} className="text-red-400" />
+                <p className="text-xs font-semibold text-red-400 uppercase tracking-wide">Watch out for</p>
+              </div>
+              <ul className="space-y-1">
+                {result.lowRatingReasons.slice(0, 3).map((reason, j) => (
+                  <li key={j} className="flex items-start gap-2 text-sm text-slate-400">
+                    <span className="text-red-500 mt-1 flex-shrink-0">•</span>
+                    <span>{reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2 flex-shrink-0">
+          {onToggleCheck && (
+            <button
+              onClick={onToggleCheck}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                isChecked
+                  ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-400'
+                  : 'bg-slate-700 border border-slate-600 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/50'
+              }`}
+            >
+              <Check size={18} className={isChecked ? 'stroke-[3]' : ''} />
+            </button>
+          )}
+          <button
+            onClick={onToggleFavorite}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
+              isFavorite
+                ? 'bg-rose-500/20 border border-rose-500/50 text-rose-400'
+                : 'bg-slate-700 border border-slate-600 text-slate-400 hover:text-rose-400 hover:border-rose-500/50'
+            }`}
+          >
+            <Heart size={18} className={isFavorite ? 'fill-rose-400' : ''} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
 const PHASES = [
   { id: 'discovery', label: 'Discovery' },
@@ -44,18 +245,12 @@ const SLOT_CONFIG = {
   ACTIVITY: { label: 'Activity', icon: Sun, color: 'text-teal-400', bg: 'bg-teal-900/30', grad: 'from-teal-600 to-cyan-700' }
 };
 
-// Map bounds fitter component
-function MapFitter({ bounds }) {
-  const map = useMap();
-  useEffect(() => {
-    if (bounds && bounds.length > 0) {
-      map.fitBounds(bounds, { padding: [40, 40] });
-    }
-  }, [bounds, map]);
-  return null;
-}
+const MAP_STYLE = [
+  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+];
 
-function StarRating({ rating, reviewCount }) {
+function StarRating({ rating: rawRating, reviewCount }) {
+  const rating = parseFloat(rawRating) || 0;
   const full = Math.floor(rating);
   const half = rating % 1 >= 0.5;
   return (
@@ -75,18 +270,23 @@ function StarRating({ rating, reviewCount }) {
   );
 }
 
-function DiscoveryPhase({ tripId, slotType, destination }) {
+function DiscoveryPhase({ tripId, slotId, slotType, destination }) {
   const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slotType);
+  const { isLoaded: mapsLoaded } = useJsApiLoader({ googleMapsApiKey: GOOGLE_MAPS_API_KEY });
 
-  const [locationInput, setLocationInput] = useState('');
+  const cached = loadDiscoveryCache(slotId);
+  const [locationInput, setLocationInput] = useState(cached?.locationInput || '');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [planLocations, setPlanLocations] = useState([]);
   const [googlePredictions, setGooglePredictions] = useState([]);
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(cached?.description || '');
   const [discovering, setDiscovering] = useState(false);
-  const [results, setResults] = useState(null);
-  const [favorites, setFavorites] = useState(new Set());
+  const [results, setResults] = useState(cached?.results || null);
   const [error, setError] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const [pickVersion, setPickVersion] = useState(0);
+  const pickedNames = new Set(loadPicks(slotId).map(p => p.name));
   const locationInputRef = useRef(null);
   const dropdownRef = useRef(null);
   const autocompleteTimer = useRef(null);
@@ -138,6 +338,7 @@ function DiscoveryPhase({ tripId, slotType, destination }) {
     setDiscovering(true);
     setError('');
     setResults(null);
+    setSelectedMarker(null);
     try {
       const data = await aiApi.discover({
         location: locationInput,
@@ -146,7 +347,25 @@ function DiscoveryPhase({ tripId, slotType, destination }) {
         destination
       });
       if (data && data.startLocation && Array.isArray(data.results)) {
-        setResults(data);
+        const startLat = parseFloat(data.startLocation.lat);
+        const startLng = parseFloat(data.startLocation.lng);
+        if (isNaN(startLat) || isNaN(startLng)) {
+          setError('Received invalid location data. Please try again.');
+        } else {
+          data.startLocation.lat = startLat;
+          data.startLocation.lng = startLng;
+          data.results = data.results.filter(r => {
+            const lat = parseFloat(r.lat);
+            const lng = parseFloat(r.lng);
+            if (isNaN(lat) || isNaN(lng)) return false;
+            r.lat = lat;
+            r.lng = lng;
+            r.rating = parseFloat(r.rating) || 0;
+            r.reviewCount = parseInt(r.reviewCount, 10) || 0;
+            return true;
+          });
+          setResults(data);
+        }
       } else {
         setError('Received unexpected data format. Please try again.');
       }
@@ -157,21 +376,67 @@ function DiscoveryPhase({ tripId, slotType, destination }) {
     }
   };
 
-  const toggleFavorite = (idx) => {
-    setFavorites(prev => {
-      const next = new Set(prev);
-      next.has(idx) ? next.delete(idx) : next.add(idx);
-      return next;
-    });
+  const handleLoadMore = async () => {
+    if (!results) return;
+    setLoadingMore(true);
+    setError('');
+    try {
+      const existingNames = results.results.map(r => r.name);
+      const data = await aiApi.discover({
+        location: locationInput,
+        slotType,
+        description,
+        destination,
+        excludeNames: existingNames,
+      });
+      if (data && Array.isArray(data.results)) {
+        const newResults = data.results.filter(r => {
+          const lat = parseFloat(r.lat);
+          const lng = parseFloat(r.lng);
+          if (isNaN(lat) || isNaN(lng)) return false;
+          r.lat = lat;
+          r.lng = lng;
+          r.rating = parseFloat(r.rating) || 0;
+          r.reviewCount = parseInt(r.reviewCount, 10) || 0;
+          return !existingNames.includes(r.name);
+        });
+        setResults(prev => ({
+          ...prev,
+          results: [...prev.results, ...newResults]
+        }));
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to load more results.');
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
-  // Build map bounds from results + start
-  const mapBounds = results
-    ? [
-        [results.startLocation.lat, results.startLocation.lng],
-        ...results.results.map(r => [r.lat, r.lng])
-      ]
-    : null;
+  const toggleFavorite = (result) => {
+    const current = loadPicks(slotId);
+    const exists = current.some(p => p.name === result.name);
+    const updated = exists
+      ? current.filter(p => p.name !== result.name)
+      : [...current, result];
+    savePicks(slotId, updated);
+    setPickVersion(v => v + 1);
+  };
+
+  useEffect(() => {
+    saveDiscoveryCache(slotId, { results, locationInput, description });
+  }, [results, locationInput, description, slotId]);
+
+  const [selectedMarker, setSelectedMarker] = useState(null);
+
+  const onMapLoad = useRef(null);
+  const fitMapBounds = (map) => {
+    if (!results) return;
+    const bounds = new window.google.maps.LatLngBounds();
+    bounds.extend({ lat: results.startLocation.lat, lng: results.startLocation.lng });
+    results.results.forEach(r => bounds.extend({ lat: r.lat, lng: r.lng }));
+    map.fitBounds(bounds, 40);
+  };
+  onMapLoad.current = fitMapBounds;
 
   const showDropdown = dropdownOpen && (filteredLocations.length > 0 || googlePredictions.length > 0 || locationInput === '');
 
@@ -303,7 +568,7 @@ function DiscoveryPhase({ tripId, slotType, destination }) {
           <p className="text-slate-400 font-medium">
             {isMeal ? 'Finding nearby restaurants...' : 'Finding activities near you...'}
           </p>
-          <p className="text-slate-500 text-sm">Powered by Gemini AI</p>
+          <p className="text-slate-500 text-sm">Powered by Google Places + Gemini AI</p>
         </div>
       )}
 
@@ -312,38 +577,66 @@ function DiscoveryPhase({ tripId, slotType, destination }) {
         <>
           {/* Map */}
           <div className="rounded-2xl overflow-hidden border border-slate-700 shadow-lg" style={{ height: 320 }}>
-            <MapContainer
-              center={[results.startLocation.lat, results.startLocation.lng]}
-              zoom={14}
-              style={{ height: '100%', width: '100%' }}
-              scrollWheelZoom={false}
-            >
-              <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              />
-              <MapFitter bounds={mapBounds} />
-              <Marker position={[results.startLocation.lat, results.startLocation.lng]} icon={startIcon}>
-                <Popup>
-                  <div className="text-sm font-semibold">Starting Point</div>
-                  <div className="text-xs text-gray-600">{results.startLocation.address}</div>
-                </Popup>
-              </Marker>
-              {results.results.map((r, i) => (
-                <Marker key={i} position={[r.lat, r.lng]} icon={resultIcon}>
-                  <Popup>
-                    <div className="text-sm font-semibold">{r.name}</div>
-                    <div className="text-xs text-gray-600">{r.address}</div>
-                    <div className="text-xs mt-1">
-                      {r.rating} stars
-                      {r.walkMinutes && ` · ${r.walkMinutes} min walk`}
-                      {r.transitMinutes && ` · ${r.transitMinutes} min transit`}
-                      {r.driveMinutes && ` · ${r.driveMinutes} min drive`}
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
+            {mapsLoaded && <GoogleMap
+                mapContainerStyle={{ height: '100%', width: '100%' }}
+                center={{ lat: results.startLocation.lat, lng: results.startLocation.lng }}
+                zoom={14}
+                onLoad={map => fitMapBounds(map)}
+                options={{
+                  styles: MAP_STYLE,
+                  disableDefaultUI: true,
+                  zoomControl: true,
+                  scrollwheel: false,
+                }}
+              >
+                <MarkerF
+                  position={{ lat: results.startLocation.lat, lng: results.startLocation.lng }}
+                  icon={'https://maps.google.com/mapfiles/ms/icons/green-dot.png'}
+                  zIndex={1000}
+                  onClick={() => setSelectedMarker('start')}
+                >
+                  {selectedMarker === 'start' && (
+                    <InfoWindowF onCloseClick={() => setSelectedMarker(null)}>
+                      <div>
+                        <div className="text-sm font-semibold">📍 Starting Point</div>
+                        <div className="text-xs text-gray-600">{results.startLocation.address}</div>
+                      </div>
+                    </InfoWindowF>
+                  )}
+                </MarkerF>
+                {results.results.map((r, i) => (
+                  <MarkerF
+                    key={i}
+                    position={{ lat: r.lat, lng: r.lng }}
+                    label={{ text: String(i + 1), color: 'white', fontWeight: 'bold', fontSize: '11px' }}
+                    onClick={() => setSelectedMarker(i)}
+                  >
+                    {selectedMarker === i && (
+                      <InfoWindowF onCloseClick={() => setSelectedMarker(null)}>
+                        <div>
+                          <div className="text-sm font-semibold">{r.name}</div>
+                          <div className="text-xs text-gray-600">{r.address}</div>
+                          <div className="text-xs mt-1">
+                            {r.rating} stars
+                            {r.walkMinutes && ` · ${r.walkMinutes} min walk`}
+                            {r.transitMinutes && ` · ${r.transitMinutes} min transit`}
+                            {r.driveMinutes && ` · ${r.driveMinutes} min drive`}
+                          </div>
+                          <a
+                            href={r.googleMapsUrl || buildGoogleMapsUrl(r.name, r.address)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:underline mt-1 inline-block"
+                          >
+                            View on Google Maps
+                          </a>
+                        </div>
+                      </InfoWindowF>
+                    )}
+                  </MarkerF>
+                ))}
+              </GoogleMap>}
+              {!mapsLoaded && <div className="h-full flex items-center justify-center bg-slate-700"><Loader2 size={24} className="animate-spin text-slate-400" /></div>}
           </div>
 
           {/* Result count */}
@@ -354,72 +647,34 @@ function DiscoveryPhase({ tripId, slotType, destination }) {
           {/* Result Cards */}
           <div className="space-y-3">
             {results.results.map((result, i) => (
-              <div key={i} className="bg-slate-800 rounded-2xl border border-slate-700 p-4 hover:border-slate-600 transition-colors">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    {/* Name + Category */}
-                    <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                      <h3 className="font-bold text-slate-100 text-base">{result.name}</h3>
-                      {(result.cuisine || result.category) && (
-                        <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full border border-slate-600">
-                          {result.cuisine || result.category}
-                        </span>
-                      )}
-                      {result.priceRange && (
-                        <span className="text-xs text-emerald-400 font-semibold">{result.priceRange}</span>
-                      )}
-                    </div>
-
-                    {/* Star Rating */}
-                    <StarRating rating={result.rating} reviewCount={result.reviewCount} />
-
-                    {/* Address */}
-                    <div className="flex items-center gap-1 mt-2 text-slate-400">
-                      <MapPin size={12} className="flex-shrink-0" />
-                      <span className="text-xs">{result.address}</span>
-                    </div>
-
-                    {/* Travel times */}
-                    <div className="flex items-center gap-3 mt-2 flex-wrap">
-                      {result.walkMinutes && (
-                        <div className="flex items-center gap-1 text-ocean-400">
-                          <Footprints size={12} />
-                          <span className="text-xs font-medium">{result.walkMinutes} min walk</span>
-                        </div>
-                      )}
-                      {result.transitMinutes && (
-                        <div className="flex items-center gap-1 text-teal-400">
-                          <Bus size={12} />
-                          <span className="text-xs font-medium">{result.transitMinutes} min transit</span>
-                        </div>
-                      )}
-                      {result.driveMinutes && (
-                        <div className="flex items-center gap-1 text-violet-400">
-                          <Car size={12} />
-                          <span className="text-xs font-medium">{result.driveMinutes} min drive</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Reason */}
-                    <p className="text-sm text-slate-300 mt-3 leading-relaxed">{result.reason}</p>
-                  </div>
-
-                  {/* Favorite button */}
-                  <button
-                    onClick={() => toggleFavorite(i)}
-                    className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
-                      favorites.has(i)
-                        ? 'bg-rose-500/20 border border-rose-500/50 text-rose-400'
-                        : 'bg-slate-700 border border-slate-600 text-slate-400 hover:text-rose-400 hover:border-rose-500/50'
-                    }`}
-                  >
-                    <Heart size={18} className={favorites.has(i) ? 'fill-rose-400' : ''} />
-                  </button>
-                </div>
-              </div>
+              <ResultCard
+                key={result.placeId || i}
+                result={result}
+                index={i}
+                isFavorite={pickedNames.has(result.name)}
+                onToggleFavorite={() => toggleFavorite(result)}
+              />
             ))}
           </div>
+
+          {/* Search for more button */}
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="w-full border-2 border-dashed border-slate-600 rounded-xl py-4 flex items-center justify-center gap-2 text-slate-400 hover:text-ocean-400 hover:border-ocean-500 transition-all duration-200 font-medium"
+          >
+            {loadingMore ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Finding more {isMeal ? 'restaurants' : 'activities'}...
+              </>
+            ) : (
+              <>
+                <Search size={16} />
+                Search for more {isMeal ? 'restaurants' : 'activities'}
+              </>
+            )}
+          </button>
         </>
       )}
 
@@ -435,6 +690,152 @@ function DiscoveryPhase({ tripId, slotType, destination }) {
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function PickPhase({ slotId, slotType }) {
+  const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slotType);
+  const [version, setVersion] = useState(0);
+  const picks = loadPicks(slotId);
+  const planSelection = loadPlanSelection(slotId);
+  const checkedName = planSelection?.result?.name || null;
+
+  const togglePick = (result) => {
+    const updated = picks.filter(p => p.name !== result.name);
+    savePicks(slotId, updated);
+    if (checkedName === result.name) {
+      savePlanSelection(slotId, null);
+    }
+    setVersion(v => v + 1);
+  };
+
+  const toggleCheck = (result) => {
+    if (checkedName === result.name) {
+      savePlanSelection(slotId, null);
+    } else {
+      savePlanSelection(slotId, { result, time: '', notes: '' });
+    }
+    setVersion(v => v + 1);
+  };
+
+  if (picks.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="text-5xl mb-4">🎯</div>
+        <h3 className="text-lg font-semibold text-slate-300 mb-2">No picks yet</h3>
+        <p className="text-slate-500 text-sm max-w-xs">
+          Use the Discovery tab to find {isMeal ? 'restaurants' : 'activities'} and tap the heart to shortlist your favorites here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <p className="text-sm text-slate-400 font-medium px-1">
+        {picks.length} {isMeal ? 'restaurant' : 'activity'}{picks.length !== 1 ? 's' : ''} shortlisted
+        {checkedName && <span className="text-emerald-400 ml-2">· 1 selected for plan</span>}
+      </p>
+      <div className="space-y-3">
+        {picks.map((result, i) => (
+          <ResultCard
+            key={result.placeId || result.name}
+            result={result}
+            index={i}
+            isFavorite={true}
+            onToggleFavorite={() => togglePick(result)}
+            isChecked={checkedName === result.name}
+            onToggleCheck={() => toggleCheck(result)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PlanPhaseContent({ slotId, slotType, config }) {
+  const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slotType);
+  const [version, setVersion] = useState(0);
+  const planSelection = loadPlanSelection(slotId);
+  const picks = loadPicks(slotId);
+  const pickedNames = new Set(picks.map(p => p.name));
+
+  const handleTimeChange = (time) => {
+    if (planSelection) {
+      savePlanSelection(slotId, { ...planSelection, time });
+      setVersion(v => v + 1);
+    }
+  };
+
+  const handleNotesChange = (notes) => {
+    if (planSelection) {
+      savePlanSelection(slotId, { ...planSelection, notes });
+      setVersion(v => v + 1);
+    }
+  };
+
+  if (!planSelection?.result) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="text-5xl mb-4">📋</div>
+        <h3 className="text-lg font-semibold text-slate-300 mb-2">No {isMeal ? 'restaurant' : 'activity'} selected</h3>
+        <p className="text-slate-500 text-sm max-w-xs">
+          Go to the Pick tab and tap the checkmark on your chosen {isMeal ? 'restaurant' : 'activity'} to add it to your plan.
+        </p>
+      </div>
+    );
+  }
+
+  const { result } = planSelection;
+
+  return (
+    <div className="space-y-5">
+      <div className={`bg-gradient-to-r ${config.grad} rounded-2xl px-5 py-4 text-white`}>
+        <h2 className="font-bold text-lg">{result.name}</h2>
+        <p className="text-white/70 text-sm">{result.address}</p>
+      </div>
+
+      <div className="bg-slate-800 rounded-2xl border border-slate-700 p-5 space-y-4">
+        <div>
+          <label className="label flex items-center gap-1.5">
+            <Clock size={13} className="text-slate-400" />
+            Time
+          </label>
+          <input
+            type="time"
+            className="input"
+            value={planSelection.time || ''}
+            onChange={e => handleTimeChange(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label flex items-center gap-1.5">
+            <FileText size={13} className="text-slate-400" />
+            Notes
+          </label>
+          <textarea
+            className="input resize-none"
+            rows={3}
+            placeholder="Reservation details, special requests, things to remember..."
+            value={planSelection.notes || ''}
+            onChange={e => handleNotesChange(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <ResultCard
+        result={result}
+        index={0}
+        isFavorite={pickedNames.has(result.name)}
+        onToggleFavorite={() => {
+          const current = loadPicks(slotId);
+          const exists = current.some(p => p.name === result.name);
+          const updated = exists ? current.filter(p => p.name !== result.name) : [...current, result];
+          savePicks(slotId, updated);
+          setVersion(v => v + 1);
+        }}
+      />
     </div>
   );
 }
@@ -588,6 +989,7 @@ function MealForm({ data, onChange, destination, slotType, onAISuggest, aiLoadin
         <div className="col-span-2">
           <InputField label="Restaurant Name" icon={Utensils} value={data.restaurantName} onChange={v => onChange({ ...data, restaurantName: v })} placeholder="e.g. Le Petit Bistro" />
         </div>
+        <InputField label="Time" icon={Clock} type="time" value={data.time} onChange={v => onChange({ ...data, time: v })} />
         <InputField label="Cuisine Type" value={data.cuisine} onChange={v => onChange({ ...data, cuisine: v })} placeholder="e.g. French, Italian" />
         <SelectField label="Price Range" icon={DollarSign} value={data.priceRange} onChange={v => onChange({ ...data, priceRange: v })} options={[
           { value: '$', label: '$ (Budget)' }, { value: '$$', label: '$$ (Moderate)' },
@@ -614,6 +1016,7 @@ function ActivityForm({ data, onChange, destination, onAISuggest, aiLoading }) {
     <div className="space-y-4">
       <InputField label="Activity Name" icon={Sun} value={data.activityName} onChange={v => onChange({ ...data, activityName: v })} placeholder="e.g. Eiffel Tower Visit" />
       <div className="grid grid-cols-2 gap-4">
+        <InputField label="Time" icon={Clock} type="time" value={data.time} onChange={v => onChange({ ...data, time: v })} />
         <SelectField label="Category" value={data.category} onChange={v => onChange({ ...data, category: v })} options={[
           { value: 'Cultural', label: 'Cultural' }, { value: 'Adventure', label: 'Adventure' },
           { value: 'Nature', label: 'Nature' }, { value: 'Food & Drink', label: 'Food & Drink' },
@@ -646,6 +1049,10 @@ function HotelForm({ data, onChange, destination, onAISuggest, aiLoading }) {
       <div className="grid grid-cols-2 gap-4">
         <InputField label="Check-in Date" icon={Clock} type="date" value={data.checkIn} onChange={v => onChange({ ...data, checkIn: v })} />
         <InputField label="Check-out Date" icon={Clock} type="date" value={data.checkOut} onChange={v => onChange({ ...data, checkOut: v })} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <InputField label="Check-in Time" icon={Clock} type="time" value={data.time} onChange={v => onChange({ ...data, time: v })} />
+        <InputField label="Check-out Time" icon={Clock} type="time" value={data.checkOutTime} onChange={v => onChange({ ...data, checkOutTime: v })} />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <InputField label="Confirmation #" icon={Hash} value={data.confirmationNumber} onChange={v => onChange({ ...data, confirmationNumber: v })} placeholder="e.g. HTLBK12345" />
@@ -703,19 +1110,29 @@ export default function PlanningPage() {
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    setError('');
-    try {
-      await slotsApi.update(slotId, { data: formData });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } catch (err) {
-      setError(err.message || 'Failed to save');
-    } finally {
-      setSaving(false);
+  const autoSaveTimer = useRef(null);
+  const initialLoad = useRef(true);
+
+  useEffect(() => {
+    if (initialLoad.current) {
+      initialLoad.current = false;
+      return;
     }
-  };
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      setSaving(true);
+      try {
+        await slotsApi.update(slotId, { data: formData });
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } catch (err) {
+        setError(err.message || 'Failed to save');
+      } finally {
+        setSaving(false);
+      }
+    }, 1000);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [formData, slotId]);
 
   const handleAISuggest = async (params) => {
     setAiLoading(true);
@@ -812,14 +1229,11 @@ export default function PlanningPage() {
                 <p className="text-xs text-slate-400">{trip?.name} · {destination}</p>
               </div>
             </div>
-            {phase === 'plan' && (
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className={`flex items-center gap-2 font-semibold py-2 px-4 rounded-lg transition-all duration-200 ${saved ? 'bg-green-500 text-white' : 'bg-ocean-500 hover:bg-ocean-600 text-white'}`}
-              >
-                {saving ? <><Loader2 size={16} className="animate-spin" />Saving...</> : saved ? <><Check size={16} />Saved!</> : <><Save size={16} />Save</>}
-              </button>
+            {!showPhases && (
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                {saving && <><Loader2 size={14} className="animate-spin" /><span>Saving...</span></>}
+                {saved && !saving && <><Check size={14} className="text-green-400" /><span className="text-green-400">Saved</span></>}
+              </div>
             )}
           </div>
         </div>
@@ -859,58 +1273,43 @@ export default function PlanningPage() {
         {showPhases && phase === 'discovery' && (
           <DiscoveryPhase
             tripId={tripId}
+            slotId={slotId}
             slotType={slotType}
             destination={destination}
           />
         )}
 
-        {/* Pick Phase - placeholder for now */}
+        {/* Pick Phase */}
         {showPhases && phase === 'pick' && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="text-5xl mb-4">🎯</div>
-            <h3 className="text-lg font-semibold text-slate-300 mb-2">Pick coming soon</h3>
-            <p className="text-slate-500 text-sm max-w-xs">
-              Use Discovery to find and favorite options, then come back here to compare and make your final pick.
-            </p>
-          </div>
+          <PickPhase slotId={slotId} slotType={slotType} />
         )}
 
         {/* The Plan Phase (or hotel always shows this) */}
         {(!showPhases || phase === 'plan') && (
-          <>
-            <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-sm overflow-hidden">
-              <div className={`bg-gradient-to-r ${config.grad} px-6 py-4 text-white`}>
-                <div className="flex items-center gap-3">
-                  <Icon size={22} />
-                  <div>
-                    <h2 className="font-bold text-lg">{config.label} Details</h2>
-                    <p className="text-white/70 text-sm">
-                      {slotType === 'HOTEL' && 'Fill in your accommodation details'}
-                      {isMeal && 'Fill in the restaurant details'}
-                      {slotType === 'ACTIVITY' && 'Fill in the activity details'}
-                    </p>
+          showPhases ? (
+            <PlanPhaseContent slotId={slotId} slotType={slotType} config={config} />
+          ) : (
+            <>
+              <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-sm overflow-hidden">
+                <div className={`bg-gradient-to-r ${config.grad} px-6 py-4 text-white`}>
+                  <div className="flex items-center gap-3">
+                    <Icon size={22} />
+                    <div>
+                      <h2 className="font-bold text-lg">{config.label} Details</h2>
+                      <p className="text-white/70 text-sm">Fill in your accommodation details</p>
+                    </div>
                   </div>
                 </div>
+                <div className="p-6">
+                  <HotelForm data={formData} onChange={setFormData} destination={destination} onAISuggest={handleAISuggest} aiLoading={aiLoading} />
+                </div>
               </div>
-              <div className="p-6">
-                {isMeal && <MealForm data={formData} onChange={setFormData} destination={destination} slotType={slotType} onAISuggest={handleAISuggest} aiLoading={aiLoading} />}
-                {slotType === 'ACTIVITY' && <ActivityForm data={formData} onChange={setFormData} destination={destination} onAISuggest={handleAISuggest} aiLoading={aiLoading} />}
-                {slotType === 'HOTEL' && <HotelForm data={formData} onChange={setFormData} destination={destination} onAISuggest={handleAISuggest} aiLoading={aiLoading} />}
-              </div>
-            </div>
 
-            {aiSuggestion && <AISuggestionCard suggestion={aiSuggestion} source={aiSource} slotType={slotType} onApply={handleApplySuggestion} />}
+              {aiSuggestion && <AISuggestionCard suggestion={aiSuggestion} source={aiSource} slotType={slotType} onApply={handleApplySuggestion} />}
 
-            <div className="pb-8">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className={`w-full flex items-center justify-center gap-2 font-semibold py-3 px-6 rounded-xl transition-all duration-200 text-white ${saved ? 'bg-green-500' : 'bg-ocean-500 hover:bg-ocean-600'}`}
-              >
-                {saving ? <><Loader2 size={18} className="animate-spin" />Saving changes...</> : saved ? <><Check size={18} />Changes saved!</> : <><Save size={18} />Save Changes</>}
-              </button>
-            </div>
-          </>
+              <div className="pb-8" />
+            </>
+          )
         )}
       </main>
     </div>
