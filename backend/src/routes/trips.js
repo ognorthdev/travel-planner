@@ -19,6 +19,15 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+const DEFAULT_DAY_SLOTS = [
+  { type: 'HOTEL', sortOrder: 0 },
+  { type: 'BREAKFAST', sortOrder: 1 },
+  { type: 'ACTIVITY', sortOrder: 2 },
+  { type: 'LUNCH', sortOrder: 5 },
+  { type: 'ACTIVITY', sortOrder: 6 },
+  { type: 'DINNER', sortOrder: 9 },
+];
+
 // POST /api/trips - Create a new trip
 router.post('/', async (req, res, next) => {
   try {
@@ -28,17 +37,57 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ error: 'name, destination, startDate, and endDate are required' });
     }
 
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const totalDays = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
     const trip = await prisma.trip.create({
       data: {
         name,
         destination,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        coverImageUrl: coverImageUrl || null
-      }
+        startDate: start,
+        endDate: end,
+        coverImageUrl: coverImageUrl || null,
+      },
     });
 
-    res.status(201).json(trip);
+    for (let i = 0; i < totalDays; i++) {
+      const dayDate = new Date(start);
+      dayDate.setDate(dayDate.getDate() + i);
+
+      const day = await prisma.day.create({
+        data: {
+          tripId: trip.id,
+          date: dayDate,
+          dayNumber: i + 1,
+        },
+      });
+
+      await Promise.all(
+        DEFAULT_DAY_SLOTS.map(slot =>
+          prisma.slot.create({
+            data: {
+              dayId: day.id,
+              type: slot.type,
+              sortOrder: slot.sortOrder,
+              data: '{}',
+            },
+          })
+        )
+      );
+    }
+
+    const fullTrip = await prisma.trip.findUnique({
+      where: { id: trip.id },
+      include: {
+        days: {
+          orderBy: { dayNumber: 'asc' },
+          include: { slots: { orderBy: { sortOrder: 'asc' } } },
+        },
+      },
+    });
+
+    res.status(201).json(fullTrip);
   } catch (err) {
     next(err);
   }

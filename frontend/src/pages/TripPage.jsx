@@ -78,17 +78,36 @@ function formatDate(dateStr) {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+function loadPlanSelection(slotId) {
+  try {
+    const raw = localStorage.getItem(`travel-planner-plan-selection-${slotId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 function SlotCard({ slot, dayId, tripId, onDelete, index, onDragStart, onDragOver, onDrop, draggingIndex }) {
   const navigate = useNavigate();
   const config = SLOT_CONFIG[slot.type] || SLOT_CONFIG.ACTIVITY;
   const Icon = config.icon;
-  const preview = slot.data?.[config.previewField];
+  const isMealOrActivity = ['BREAKFAST', 'LUNCH', 'DINNER', 'ACTIVITY'].includes(slot.type);
+  const planSelection = isMealOrActivity ? loadPlanSelection(slot.id) : null;
+  const hasPlan = planSelection?.result != null;
+
+  const preview = hasPlan ? planSelection.result.name : slot.data?.[config.previewField];
   const isEmpty = !preview;
-  const time = slot.data?.time;
+  const time = hasPlan ? planSelection.time : slot.data?.time;
+  const description = hasPlan ? (planSelection.result.shortDescription || '') : null;
+  const photos = hasPlan ? (planSelection.result.photos || []) : [];
+  const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slot.type);
+  const thumbnailUrl = photos.length > 0
+    ? (isMeal ? (photos[2]?.url || photos[0]?.url) : (photos[1]?.url || photos[0]?.url))
+    : null;
   const isDragging = draggingIndex === index;
 
   const handleClick = () => {
-    navigate(`/trips/${tripId}/days/${dayId}/slots/${slot.id}`);
+    const phase = hasPlan ? 'plan' : '';
+    const url = `/trips/${tripId}/days/${dayId}/slots/${slot.id}${phase ? `?phase=${phase}` : ''}`;
+    navigate(url);
   };
 
   const handleDeleteClick = async (e) => {
@@ -112,9 +131,15 @@ function SlotCard({ slot, dayId, tripId, onDelete, index, onDragStart, onDragOve
         >
           <GripVertical size={14} />
         </div>
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-700 shadow-sm flex-shrink-0">
-          <Icon size={14} className={config.color} />
-        </div>
+        {thumbnailUrl ? (
+          <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 shadow-sm">
+            <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          </div>
+        ) : (
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-700 shadow-sm flex-shrink-0">
+            <Icon size={14} className={config.color} />
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p className={`text-xs font-semibold ${config.color} uppercase tracking-wide`}>
@@ -128,9 +153,16 @@ function SlotCard({ slot, dayId, tripId, onDelete, index, onDragStart, onDragOve
             )}
           </div>
           {!isEmpty ? (
-            <p className="text-sm font-medium text-slate-200 truncate mt-0.5">
-              {preview}
-            </p>
+            <>
+              <p className="text-sm font-medium text-slate-200 truncate mt-0.5">
+                {preview}
+              </p>
+              {description && (
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  {description}
+                </p>
+              )}
+            </>
           ) : (
             <p className="text-sm text-slate-500 mt-0.5">
               {config.addLabel}

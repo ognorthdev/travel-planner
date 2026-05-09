@@ -345,6 +345,7 @@ ${placeList}
 
 For each restaurant (use the EXACT name as listed), provide:
 - "reason": 2-3 sentence description of why this restaurant is special and what to expect${description ? `, especially in relation to the traveler's interest in "${description}"` : ''}
+- "shortDescription": a 3-4 word tagline capturing the essence of this restaurant (e.g. "Authentic wood-fired ramen", "Upscale sushi omakase", "Cozy Italian trattoria")
 - "cuisine": the type of cuisine
 - "topDishes": array of 3 objects with "name" and "description" (the most praised dishes from reviews${description ? ` — prioritize dishes relevant to "${description}"` : ''})
 - "reviewTips": array of 3 practical tips visitors should know
@@ -357,6 +358,7 @@ Return ONLY valid JSON, no markdown, no code fences:
     {
       "name": "exact restaurant name",
       "reason": "...",
+      "shortDescription": "...",
       "cuisine": "...",
       "topDishes": [{"name": "...", "description": "..."}],
       "reviewTips": ["...", "...", "..."],
@@ -378,6 +380,7 @@ ${placeList}
 
 For each place (use the EXACT name as listed), provide:
 - "reason": 2-3 sentence description of why this place is recommended and what to expect${description ? `, especially in relation to the traveler's interest in "${description}"` : ''}
+- "shortDescription": a 3-4 word tagline capturing the essence of this place (e.g. "Stunning hilltop temple", "Vibrant local market", "Scenic river cruise")
 - "category": activity category (Cultural, Adventure, Nature, Food, Shopping, etc.)
 - "duration": suggested visit duration
 ${travelTimeInstruction}
@@ -388,6 +391,7 @@ Return ONLY valid JSON, no markdown, no code fences:
     {
       "name": "exact place name",
       "reason": "...",
+      "shortDescription": "...",
       "category": "...",
       "duration": "...",
       "walkMinutes": <number or null>,
@@ -504,6 +508,7 @@ router.post('/discover', async (req, res, next) => {
           ...travelTimes,
           cuisine: aug.cuisine || '',
           reason: aug.reason || '',
+          shortDescription: aug.shortDescription || '',
           topDishes: aug.topDishes || [],
           reviewTips: aug.reviewTips || [],
           lowRatingReasons: aug.lowRatingReasons || [],
@@ -515,6 +520,7 @@ router.post('/discover', async (req, res, next) => {
         category: aug.category || '',
         duration: aug.duration || '',
         reason: aug.reason || '',
+        shortDescription: aug.shortDescription || '',
       };
     });
 

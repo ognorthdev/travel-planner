@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Save, Loader2, Wand2, Hotel, Coffee, Moon, Utensils,
   Sun, MapPin, Clock, DollarSign, FileText, Phone, Hash, Check,
@@ -1076,6 +1076,7 @@ function HotelForm({ data, onChange, destination, onAISuggest, aiLoading }) {
 export default function PlanningPage() {
   const { tripId, dayId, slotId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [slot, setSlot] = useState(null);
   const [trip, setTrip] = useState(null);
@@ -1087,7 +1088,7 @@ export default function PlanningPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [aiSource, setAiSource] = useState('');
-  const [phase, setPhase] = useState('discovery');
+  const [phase, setPhase] = useState(() => searchParams.get('phase') || 'discovery');
 
   const slotType = slot?.type;
   const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slotType);
@@ -1211,12 +1212,25 @@ export default function PlanningPage() {
   const Icon = config.icon;
   const destination = trip?.destination || '';
 
+  const currentDay = trip?.days?.find(d => d.id === dayId);
+  const daySlots = currentDay?.slots || [];
+
+  const handleSlotNav = (targetSlotId) => {
+    if (targetSlotId === slotId) return;
+    const targetSlot = daySlots.find(s => s.id === targetSlotId);
+    const isMealOrActivity = targetSlot && ['BREAKFAST', 'LUNCH', 'DINNER', 'ACTIVITY'].includes(targetSlot.type);
+    const targetPlan = isMealOrActivity ? loadPlanSelection(targetSlotId) : null;
+    const targetPhase = targetPlan?.result ? 'plan' : '';
+    navigate(`/trips/${tripId}/days/${dayId}/slots/${targetSlotId}${targetPhase ? `?phase=${targetPhase}` : ''}`);
+  };
+
   return (
     <div className="min-h-screen bg-slate-900">
       {/* Header */}
       <header className="bg-slate-800 border-b border-slate-700 shadow-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center gap-4 h-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex gap-6">
+          {daySlots.length > 0 && <div className="hidden lg:block w-56 flex-shrink-0" />}
+          <div className="flex items-center gap-4 h-16 flex-1 min-w-0 max-w-2xl">
             <button onClick={() => navigate(`/trips/${tripId}`)} className="p-2 rounded-full hover:bg-slate-700 transition-colors text-slate-400">
               <ArrowLeft size={20} />
             </button>
@@ -1226,7 +1240,7 @@ export default function PlanningPage() {
               </div>
               <div>
                 <h1 className="font-bold text-slate-100">{config.label} Planning</h1>
-                <p className="text-xs text-slate-400">{trip?.name} · {destination}</p>
+                <p className="text-xs text-slate-400">{trip?.name} · {destination}{currentDay ? ` · Day ${currentDay.dayNumber}` : ''}</p>
               </div>
             </div>
             {!showPhases && (
@@ -1242,8 +1256,9 @@ export default function PlanningPage() {
       {/* Phase Tabs - only for meals and activities */}
       {showPhases && (
         <div className="bg-slate-800 border-b border-slate-700 sticky top-16 z-10">
-          <div className="max-w-2xl mx-auto px-4 sm:px-6">
-            <div className="flex">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 flex gap-6">
+            {daySlots.length > 0 && <div className="hidden lg:block w-56 flex-shrink-0" />}
+            <div className="flex flex-1 min-w-0 max-w-2xl">
               {PHASES.map((p, i) => (
                 <button
                   key={p.id}
@@ -1263,8 +1278,57 @@ export default function PlanningPage() {
         </div>
       )}
 
-      {/* Content */}
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex gap-6">
+        {/* Day sidebar */}
+        {daySlots.length > 0 && (
+          <aside className="hidden lg:block w-56 flex-shrink-0">
+            <div className="sticky top-28">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                Day {currentDay?.dayNumber}
+              </p>
+              <div className="space-y-1.5">
+                {daySlots.map(s => {
+                  const sc = SLOT_CONFIG[s.type] || SLOT_CONFIG.ACTIVITY;
+                  const SIcon = sc.icon;
+                  const isActive = s.id === slotId;
+                  const isMealOrAct = ['BREAKFAST', 'LUNCH', 'DINNER', 'ACTIVITY'].includes(s.type);
+                  const sPlan = isMealOrAct ? loadPlanSelection(s.id) : null;
+                  const sName = sPlan?.result?.name || s.data?.[sc.previewField] || '';
+                  const sTime = sPlan?.time || s.data?.time || '';
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => handleSlotNav(s.id)}
+                      className={`w-full text-left rounded-xl px-3 py-2.5 transition-all duration-150 border ${
+                        isActive
+                          ? `${sc.bg} ${sc.border} ring-1 ring-${sc.color.replace('text-', '')}/30`
+                          : 'border-transparent hover:bg-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <SIcon size={13} className={isActive ? sc.color : 'text-slate-500'} />
+                        <span className={`text-xs font-semibold uppercase tracking-wide ${isActive ? sc.color : 'text-slate-500'}`}>
+                          {sc.label}
+                        </span>
+                        {sTime && (
+                          <span className="text-[10px] text-slate-500 ml-auto">{sTime}</span>
+                        )}
+                      </div>
+                      {sName && (
+                        <p className={`text-xs mt-0.5 truncate ${isActive ? 'text-slate-300' : 'text-slate-500'}`}>
+                          {sName}
+                        </p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
+        )}
+
+        {/* Content */}
+        <main className="flex-1 min-w-0 max-w-2xl space-y-6">
         {error && (
           <div className="bg-red-900/30 border border-red-700 rounded-xl px-4 py-3 text-red-300 text-sm">{error}</div>
         )}
@@ -1312,6 +1376,7 @@ export default function PlanningPage() {
           )
         )}
       </main>
+      </div>
     </div>
   );
 }
