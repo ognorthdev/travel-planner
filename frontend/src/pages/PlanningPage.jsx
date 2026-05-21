@@ -1041,10 +1041,105 @@ function ActivityForm({ data, onChange, destination, onAISuggest, aiLoading }) {
   );
 }
 
-function HotelForm({ data, onChange, destination, onAISuggest, aiLoading }) {
+function HotelNameField({ value, onChange, onSelect }) {
+  const [input, setInput] = useState(value || '');
+  const [predictions, setPredictions] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const timerRef = useRef(null);
+  const containerRef = useRef(null);
+
+  useEffect(() => { setInput(value || ''); }, [value]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setShowDropdown(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (input.trim().length < 3) { setPredictions([]); return; }
+    timerRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const data = await placesApi.autocomplete(input);
+        setPredictions(data.predictions || []);
+        setShowDropdown(true);
+      } catch { setPredictions([]); }
+      finally { setLoading(false); }
+    }, 300);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [input]);
+
+  const handleSelect = async (prediction) => {
+    setInput(prediction.mainText || prediction.description);
+    onChange(prediction.mainText || prediction.description);
+    setShowDropdown(false);
+    setPredictions([]);
+    if (prediction.placeId) {
+      try {
+        const details = await placesApi.getDetails(prediction.placeId);
+        onSelect(details);
+      } catch { /* keep typed text, no autofill */ }
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <label className="label flex items-center gap-1.5">
+        <Hotel size={13} className="text-slate-400" />
+        Hotel Name
+      </label>
+      <div className="relative">
+        <input
+          type="text"
+          className="input w-full"
+          value={input}
+          onChange={e => { setInput(e.target.value); onChange(e.target.value); }}
+          placeholder="e.g. The Ritz Paris"
+        />
+        {loading && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-slate-400" />}
+      </div>
+      {showDropdown && predictions.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full bg-slate-800 border border-slate-600 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+          {predictions.map((p, i) => (
+            <button
+              key={p.placeId || i}
+              onClick={() => handleSelect(p)}
+              className="w-full text-left px-3 py-2.5 hover:bg-slate-700 transition-colors flex items-start gap-2 border-b border-slate-700/50 last:border-b-0"
+            >
+              <MapPin size={14} className="text-slate-400 mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-sm text-white truncate">{p.mainText || p.description}</div>
+                {p.secondaryText && <div className="text-xs text-slate-400 truncate">{p.secondaryText}</div>}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HotelForm({ data, onChange }) {
+  const handlePlaceSelect = (details) => {
+    onChange({
+      ...data,
+      address: details.address || data.address,
+      phoneNumber: details.phoneNumber || data.phoneNumber,
+    });
+  };
+
   return (
     <div className="space-y-4">
-      <InputField label="Hotel Name" icon={Hotel} value={data.hotelName} onChange={v => onChange({ ...data, hotelName: v })} placeholder="e.g. The Ritz Paris" />
+      <HotelNameField
+        value={data.hotelName}
+        onChange={v => onChange({ ...data, hotelName: v })}
+        onSelect={handlePlaceSelect}
+      />
       <InputField label="Address" icon={MapPin} value={data.address} onChange={v => onChange({ ...data, address: v })} placeholder="Hotel address" />
       <div className="grid grid-cols-2 gap-4">
         <InputField label="Check-in Date" icon={Clock} type="date" value={data.checkIn} onChange={v => onChange({ ...data, checkIn: v })} />
@@ -1060,15 +1155,6 @@ function HotelForm({ data, onChange, destination, onAISuggest, aiLoading }) {
       </div>
       <InputField label="Phone Number" icon={Phone} type="tel" value={data.phoneNumber} onChange={v => onChange({ ...data, phoneNumber: v })} placeholder="Hotel contact number" />
       <TextAreaField label="Notes" icon={FileText} value={data.notes} onChange={v => onChange({ ...data, notes: v })} placeholder="Special requests, amenities, nearby attractions..." />
-      <div className="pt-2">
-        <button
-          onClick={() => onAISuggest({ destination, budget: data.priceRange })}
-          disabled={aiLoading}
-          className="w-full border-2 border-violet-700/50 hover:border-violet-500 bg-violet-900/20 hover:bg-violet-900/40 text-violet-300 font-semibold py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-        >
-          {aiLoading ? <><Loader2 size={16} className="animate-spin" />Getting AI suggestion...</> : <><Wand2 size={16} />Get AI Hotel Suggestion</>}
-        </button>
-      </div>
     </div>
   );
 }
@@ -1365,7 +1451,7 @@ export default function PlanningPage() {
                   </div>
                 </div>
                 <div className="p-6">
-                  <HotelForm data={formData} onChange={setFormData} destination={destination} onAISuggest={handleAISuggest} aiLoading={aiLoading} />
+                  <HotelForm data={formData} onChange={setFormData} />
                 </div>
               </div>
 

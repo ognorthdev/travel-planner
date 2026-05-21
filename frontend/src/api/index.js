@@ -62,6 +62,7 @@ export const aiApi = {
 export const placesApi = {
   autocomplete: (input, locationBias) => api.post('/places/autocomplete', { input, locationBias }),
   getPhotos: (name, address, placeId) => api.get('/places/photos', { params: { name, address, placeId } }),
+  getDetails: (placeId) => api.get(`/places/details/${placeId}`),
 };
 
 export const locationsApi = {

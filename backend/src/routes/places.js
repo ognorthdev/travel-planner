@@ -147,4 +147,37 @@ router.get('/photos', async (req, res, next) => {
   }
 });
 
+// GET /api/places/details/:placeId
+router.get('/details/:placeId', async (req, res, next) => {
+  try {
+    if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === 'your_google_maps_api_key_here') {
+      return res.status(501).json({ error: 'Google Maps API key not configured' });
+    }
+
+    const { placeId } = req.params;
+    const url = `https://places.googleapis.com/v1/places/${placeId}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+        'X-Goog-FieldMask': 'formattedAddress,nationalPhoneNumber,internationalPhoneNumber',
+      },
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error('Place Details error:', response.status, err);
+      return res.status(response.status).json({ error: 'Place Details API error' });
+    }
+
+    const data = await response.json();
+    res.json({
+      address: data.formattedAddress || '',
+      phoneNumber: data.nationalPhoneNumber || data.internationalPhoneNumber || '',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
