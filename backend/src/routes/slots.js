@@ -165,6 +165,65 @@ router.put('/days/:dayId/slots/reorder', async (req, res, next) => {
   }
 });
 
+// PUT /api/slots/:id/move - Move a slot to a different day
+router.put('/slots/:id/move', async (req, res, next) => {
+  try {
+    const slot = await prisma.slot.findUnique({ where: { id: req.params.id } });
+    if (!slot) {
+      return res.status(404).json({ error: 'Slot not found' });
+    }
+
+    const { targetDayId, position } = req.body;
+    if (!targetDayId) {
+      return res.status(400).json({ error: 'targetDayId is required' });
+    }
+
+    const targetDay = await prisma.day.findUnique({ where: { id: targetDayId } });
+    if (!targetDay) {
+      return res.status(404).json({ error: 'Target day not found' });
+    }
+
+    const targetSlots = await prisma.slot.findMany({
+      where: { dayId: targetDayId },
+      orderBy: { sortOrder: 'asc' }
+    });
+
+    const insertAt = position !== undefined ? position : targetSlots.length;
+
+    const updates = [];
+    updates.push(
+      prisma.slot.update({
+        where: { id: req.params.id },
+        data: { dayId: targetDayId, sortOrder: insertAt }
+      })
+    );
+    targetSlots.forEach((s, i) => {
+      const newOrder = i >= insertAt ? i + 1 : i;
+      if (newOrder !== s.sortOrder) {
+        updates.push(prisma.slot.update({ where: { id: s.id }, data: { sortOrder: newOrder } }));
+      }
+    });
+
+    await prisma.$transaction(updates);
+
+    const [sourceDaySlots, targetDaySlots] = await Promise.all([
+      prisma.slot.findMany({ where: { dayId: slot.dayId }, orderBy: { sortOrder: 'asc' } }),
+      prisma.slot.findMany({ where: { dayId: targetDayId }, orderBy: { sortOrder: 'asc' } }),
+    ]);
+
+    const parse = (s) => ({ ...s, data: typeof s.data === 'string' ? JSON.parse(s.data) : s.data });
+
+    res.json({
+      sourceDayId: slot.dayId,
+      targetDayId,
+      sourceDaySlots: sourceDaySlots.map(parse),
+      targetDaySlots: targetDaySlots.map(parse),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/slots/:id - Delete a slot
 router.delete('/slots/:id', async (req, res, next) => {
   try {

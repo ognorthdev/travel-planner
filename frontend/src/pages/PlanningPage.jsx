@@ -5,7 +5,7 @@ import {
   Sun, MapPin, Clock, DollarSign, FileText, Phone, Hash, Check,
   Star, Info, ChevronDown, ChevronUp, Search, Heart, Navigation,
   Bus, Footprints, Car, UtensilsCrossed, Lightbulb, ThumbsDown,
-  ExternalLink
+  ExternalLink, Copy
 } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-maps/api';
 import { slotsApi, tripsApi, aiApi, locationsApi, placesApi } from '../api/index.js';
@@ -1175,6 +1175,8 @@ export default function PlanningPage() {
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [aiSource, setAiSource] = useState('');
   const [phase, setPhase] = useState(() => searchParams.get('phase') || 'discovery');
+  const [copyingHotel, setCopyingHotel] = useState(false);
+  const [copiedHotel, setCopiedHotel] = useState(false);
 
   const slotType = slot?.type;
   const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slotType);
@@ -1266,6 +1268,28 @@ export default function PlanningPage() {
       }));
     }
     setAiSuggestion(null);
+  };
+
+  const handleCopyHotelToAllDays = async () => {
+    if (!trip?.days) return;
+    const otherHotelSlots = trip.days
+      .flatMap(d => (d.slots || []))
+      .filter(s => s.type === 'HOTEL' && s.id !== slotId);
+
+    if (otherHotelSlots.length === 0) return;
+
+    setCopyingHotel(true);
+    try {
+      await Promise.all(
+        otherHotelSlots.map(s => slotsApi.update(s.id, { data: formData }))
+      );
+      setCopiedHotel(true);
+      setTimeout(() => setCopiedHotel(false), 3000);
+    } catch (err) {
+      console.error('Failed to copy hotel to all days:', err);
+    } finally {
+      setCopyingHotel(false);
+    }
   };
 
   if (loading) {
@@ -1454,6 +1478,26 @@ export default function PlanningPage() {
                   <HotelForm data={formData} onChange={setFormData} />
                 </div>
               </div>
+
+              {trip?.days?.length > 1 && (
+                <button
+                  onClick={handleCopyHotelToAllDays}
+                  disabled={copyingHotel || !formData.hotelName}
+                  className={`w-full border-2 rounded-xl py-3 px-4 font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
+                    copiedHotel
+                      ? 'border-emerald-500/50 bg-emerald-900/20 text-emerald-400'
+                      : 'border-purple-700/50 hover:border-purple-500 bg-purple-900/20 hover:bg-purple-900/40 text-purple-300'
+                  }`}
+                >
+                  {copyingHotel ? (
+                    <><Loader2 size={16} className="animate-spin" />Copying to all days...</>
+                  ) : copiedHotel ? (
+                    <><Check size={16} />Copied to {trip.days.length - 1} other day{trip.days.length - 1 !== 1 ? 's' : ''}</>
+                  ) : (
+                    <><Copy size={16} />Copy hotel to all days</>
+                  )}
+                </button>
+              )}
 
               {aiSuggestion && <AISuggestionCard suggestion={aiSuggestion} source={aiSource} slotType={slotType} onApply={handleApplySuggestion} />}
 

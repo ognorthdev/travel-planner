@@ -4,7 +4,9 @@ import {
   ArrowLeft, Plus, Calendar, MapPin, Loader2, Hotel, Coffee, Sun,
   Moon, Utensils, ChevronRight, Trash2, X, AlertTriangle, Clock, GripVertical
 } from 'lucide-react';
-import { tripsApi, daysApi, slotsApi } from '../api/index.js';
+import { tripsApi, daysApi, slotsApi, researchApi } from '../api/index.js';
+import ResearchBottomPanel from '../components/research/ResearchBottomPanel';
+import ResearchOverlay from '../components/research/ResearchOverlay';
 
 const SLOT_CONFIG = {
   HOTEL: {
@@ -85,7 +87,7 @@ function loadPlanSelection(slotId) {
   } catch { return null; }
 }
 
-function SlotCard({ slot, dayId, tripId, onDelete, index, onDragStart, onDragOver, onDrop, draggingIndex }) {
+function SlotCard({ slot, dayId, tripId, onDelete, index, isDragging, onDragStateChange }) {
   const navigate = useNavigate();
   const config = SLOT_CONFIG[slot.type] || SLOT_CONFIG.ACTIVITY;
   const Icon = config.icon;
@@ -102,7 +104,6 @@ function SlotCard({ slot, dayId, tripId, onDelete, index, onDragStart, onDragOve
   const thumbnailUrl = photos.length > 0
     ? (isMeal ? (photos[2]?.url || photos[0]?.url) : (photos[1]?.url || photos[0]?.url))
     : null;
-  const isDragging = draggingIndex === index;
 
   const handleClick = () => {
     const phase = hasPlan ? 'plan' : '';
@@ -115,14 +116,19 @@ function SlotCard({ slot, dayId, tripId, onDelete, index, onDragStart, onDragOve
     onDelete(slot.id);
   };
 
+  const handleDragStart = (e) => {
+    const payload = { slotId: slot.id, sourceDayId: dayId, sourceIndex: index };
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/json', JSON.stringify(payload));
+    onDragStateChange(payload);
+  };
+
   return (
     <div
       draggable
-      onDragStart={(e) => onDragStart(e, index)}
-      onDragOver={(e) => onDragOver(e, index)}
-      onDrop={(e) => onDrop(e, index)}
+      onDragStart={handleDragStart}
       onClick={handleClick}
-      className={`group relative rounded-xl border ${config.border} ${config.bg} p-3 cursor-pointer hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 ${isDragging ? 'opacity-40' : ''}`}
+      className={`group relative rounded-xl border ${config.border} ${config.bg} p-3 cursor-pointer hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 ${isDragging ? 'opacity-40 scale-95' : ''}`}
     >
       <div className="flex items-center gap-2">
         <div
@@ -172,7 +178,6 @@ function SlotCard({ slot, dayId, tripId, onDelete, index, onDragStart, onDragOve
         <ChevronRight size={14} className={`${config.color} opacity-50 flex-shrink-0`} />
       </div>
 
-      {/* Delete button - shown on hover */}
       <button
         onClick={handleDeleteClick}
         className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full hidden group-hover:flex items-center justify-center shadow-md hover:bg-red-600 transition-colors z-10"
@@ -183,42 +188,83 @@ function SlotCard({ slot, dayId, tripId, onDelete, index, onDragStart, onDragOve
   );
 }
 
-function DayColumn({ day, tripId, onAddSlot, onDeleteSlot, onDeleteDay, onReorderSlots }) {
+function DayColumn({ day, tripId, onAddSlot, onDeleteSlot, onDeleteDay, onReorderSlots, onMoveSlot, onResearchDrop, dragState, onDragStateChange }) {
   const [showAddSlot, setShowAddSlot] = useState(false);
-  const [draggingIndex, setDraggingIndex] = useState(null);
-  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [dropIndex, setDropIndex] = useState(null);
   const slotTypes = ['BREAKFAST', 'LUNCH', 'DINNER', 'ACTIVITY', 'HOTEL'];
 
-  const handleDragStart = (e, index) => {
-    setDraggingIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
+  const isDragSource = dragState?.sourceDayId === day.id;
+
+  const handleSlotDragOver = (e, index) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDropIndex(index);
   };
 
-  const handleDragOver = (e, index) => {
+  const handleColumnDragOver = (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    setDragOverIndex(index);
+    if (dropIndex === null && day.slots?.length === 0) {
+      setDropIndex(0);
+    }
   };
 
-  const handleDrop = (e, dropIndex) => {
+  const handleDrop = (e, targetIndex) => {
     e.preventDefault();
-    if (draggingIndex !== null && draggingIndex !== dropIndex) {
-      const slots = [...(day.slots || [])];
-      const [moved] = slots.splice(draggingIndex, 1);
-      slots.splice(dropIndex, 0, moved);
-      onReorderSlots(day.id, slots);
+    e.stopPropagation();
+    setDropIndex(null);
+
+    let payload;
+    try { payload = JSON.parse(e.dataTransfer.getData('application/json')); } catch { return; }
+
+    if (payload.source === 'research') {
+      onResearchDrop?.(day.id, payload, targetIndex);
+      onDragStateChange(null);
+      return;
     }
-    setDraggingIndex(null);
-    setDragOverIndex(null);
+
+    const { slotId, sourceDayId, sourceIndex } = payload;
+
+    if (sourceDayId === day.id) {
+      if (sourceIndex !== targetIndex) {
+        const slots = [...(day.slots || [])];
+        const [moved] = slots.splice(sourceIndex, 1);
+        const adjustedTarget = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
+        slots.splice(adjustedTarget, 0, moved);
+        onReorderSlots(day.id, slots);
+      }
+    } else {
+      onMoveSlot(slotId, sourceDayId, day.id, targetIndex);
+    }
+    onDragStateChange(null);
+  };
+
+  const handleColumnDrop = (e) => {
+    handleDrop(e, day.slots?.length || 0);
+  };
+
+  const handleDragLeave = (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDropIndex(null);
+    }
   };
 
   const handleDragEnd = () => {
-    setDraggingIndex(null);
-    setDragOverIndex(null);
+    setDropIndex(null);
+    onDragStateChange(null);
   };
 
   return (
-    <div className="flex-shrink-0 w-64 bg-slate-800 rounded-2xl border border-slate-700 shadow-sm overflow-hidden" onDragEnd={handleDragEnd}>
+    <div
+      className={`flex-shrink-0 w-64 bg-slate-800 rounded-2xl border shadow-sm overflow-hidden transition-colors duration-200 ${
+        dropIndex !== null ? 'border-ocean-500 bg-slate-800/80' : 'border-slate-700'
+      }`}
+      onDragOver={handleColumnDragOver}
+      onDrop={handleColumnDrop}
+      onDragLeave={handleDragLeave}
+      onDragEnd={handleDragEnd}
+    >
       {/* Day Header */}
       <div className="bg-gradient-to-r from-ocean-600 to-teal-600 p-4 text-white relative">
         <div className="flex items-center justify-between">
@@ -242,21 +288,42 @@ function DayColumn({ day, tripId, onAddSlot, onDeleteSlot, onDeleteDay, onReorde
       <div className="p-3 space-y-2">
         {day.slots && day.slots.length > 0 ? (
           day.slots.map((slot, index) => (
-            <SlotCard
-              key={slot.id}
-              slot={slot}
-              dayId={day.id}
-              tripId={tripId}
-              onDelete={onDeleteSlot}
-              index={index}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              draggingIndex={draggingIndex}
-            />
+            <React.Fragment key={slot.id}>
+              {dropIndex === index && (
+                <div className="h-1 bg-ocean-400 rounded-full mx-2 animate-pulse" />
+              )}
+              <div
+                onDragOver={(e) => handleSlotDragOver(e, index)}
+                onDrop={(e) => handleDrop(e, index)}
+              >
+                <SlotCard
+                  slot={slot}
+                  dayId={day.id}
+                  tripId={tripId}
+                  onDelete={onDeleteSlot}
+                  index={index}
+                  isDragging={isDragSource && dragState?.slotId === slot.id}
+                  onDragStateChange={onDragStateChange}
+                />
+              </div>
+            </React.Fragment>
           ))
         ) : (
-          <p className="text-center text-slate-500 text-sm py-4">No slots yet</p>
+          <div
+            className="text-center text-slate-500 text-sm py-4 border-2 border-dashed border-transparent rounded-xl transition-colors"
+            onDragOver={(e) => { e.preventDefault(); setDropIndex(0); }}
+            onDrop={(e) => handleDrop(e, 0)}
+          >
+            {dropIndex !== null ? (
+              <p className="text-ocean-400 font-medium">Drop here</p>
+            ) : (
+              <p>No slots yet</p>
+            )}
+          </div>
+        )}
+
+        {day.slots?.length > 0 && dropIndex === day.slots.length && (
+          <div className="h-1 bg-ocean-400 rounded-full mx-2 animate-pulse" />
         )}
 
         {/* Add Slot */}
@@ -333,9 +400,13 @@ export default function TripPage() {
   const [error, setError] = useState('');
   const [addingDay, setAddingDay] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [dragState, setDragState] = useState(null);
+  const [showResearch, setShowResearch] = useState(false);
+  const [savedIdeas, setSavedIdeas] = useState([]);
 
   useEffect(() => {
     loadTripData();
+    researchApi.getIdeas(tripId).then(setSavedIdeas).catch(() => {});
   }, [tripId]);
 
   const loadTripData = async () => {
@@ -403,6 +474,75 @@ export default function TripPage() {
     } catch (err) {
       console.error('Failed to reorder slots:', err);
       loadTripData();
+    }
+  };
+
+  const handleMoveSlot = async (slotId, sourceDayId, targetDayId, position) => {
+    const sourceDay = days.find(d => d.id === sourceDayId);
+    const targetDay = days.find(d => d.id === targetDayId);
+    if (!sourceDay || !targetDay) return;
+
+    const movedSlot = sourceDay.slots.find(s => s.id === slotId);
+    if (!movedSlot) return;
+
+    // Optimistic update
+    setDays(prev => prev.map(day => {
+      if (day.id === sourceDayId) {
+        return { ...day, slots: day.slots.filter(s => s.id !== slotId) };
+      }
+      if (day.id === targetDayId) {
+        const newSlots = [...(day.slots || [])];
+        newSlots.splice(position, 0, movedSlot);
+        return { ...day, slots: newSlots };
+      }
+      return day;
+    }));
+
+    try {
+      const result = await slotsApi.move(slotId, targetDayId, position);
+      setDays(prev => prev.map(day => {
+        if (day.id === result.sourceDayId) return { ...day, slots: result.sourceDaySlots };
+        if (day.id === result.targetDayId) return { ...day, slots: result.targetDaySlots };
+        return day;
+      }));
+    } catch (err) {
+      console.error('Failed to move slot:', err);
+      loadTripData();
+    }
+  };
+
+  const handleDragStateChange = (state) => {
+    setDragState(state);
+  };
+
+  const handleDeleteIdea = async (idea) => {
+    try {
+      await researchApi.deleteIdea(idea.id);
+      setSavedIdeas(prev => prev.filter(i => i.id !== idea.id));
+    } catch (err) {
+      console.error('Failed to delete idea:', err);
+    }
+  };
+
+  const handleResearchDrop = async (dayId, payload, position) => {
+    const data = typeof payload.data === 'string' ? JSON.parse(payload.data) : (payload.data || {});
+    const slotData = payload.type === 'ACTIVITY'
+      ? { activityName: payload.name, description: payload.description, ...data }
+      : { restaurantName: payload.name, description: payload.description, ...data };
+
+    try {
+      const newSlot = await slotsApi.create(dayId, {
+        type: payload.type,
+        sortOrder: position,
+        data: slotData,
+      });
+      setDays(prev => prev.map(day =>
+        day.id === dayId
+          ? { ...day, slots: [...(day.slots || []), newSlot].sort((a, b) => a.sortOrder - b.sortOrder) }
+          : day
+      ));
+    } catch (err) {
+      console.error('Failed to create slot from idea:', err);
     }
   };
 
@@ -567,6 +707,10 @@ export default function TripPage() {
                 onDeleteSlot={handleDeleteSlot}
                 onDeleteDay={handleDeleteDay}
                 onReorderSlots={handleReorderSlots}
+                onMoveSlot={handleMoveSlot}
+                onResearchDrop={handleResearchDrop}
+                dragState={dragState}
+                onDragStateChange={handleDragStateChange}
               />
             ))}
 
@@ -589,12 +733,29 @@ export default function TripPage() {
         )}
       </div>
 
+      {/* Bottom Panel */}
+      <ResearchBottomPanel
+        ideas={savedIdeas}
+        onOpenResearch={() => setShowResearch(true)}
+        onDeleteIdea={handleDeleteIdea}
+      />
+
       {deleteConfirm && (
         <DeleteConfirmModal
           title={deleteConfirm.title}
           message={deleteConfirm.message}
           onConfirm={confirmDelete}
           onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
+
+      {showResearch && trip && (
+        <ResearchOverlay
+          tripId={tripId}
+          destination={trip.destination}
+          onClose={() => setShowResearch(false)}
+          savedIdeas={savedIdeas}
+          onIdeasChange={setSavedIdeas}
         />
       )}
     </div>

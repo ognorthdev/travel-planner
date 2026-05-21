@@ -48,7 +48,8 @@ export const slotsApi = {
   create: (dayId, data) => api.post(`/days/${dayId}/slots`, data),
   update: (id, data) => api.put(`/slots/${id}`, data),
   delete: (id) => api.delete(`/slots/${id}`),
-  reorder: (dayId, slotIds) => api.put(`/days/${dayId}/slots/reorder`, { slotIds })
+  reorder: (dayId, slotIds) => api.put(`/days/${dayId}/slots/reorder`, { slotIds }),
+  move: (slotId, targetDayId, position) => api.put(`/slots/${slotId}/move`, { targetDayId, position })
 };
 
 // AI
@@ -63,10 +64,62 @@ export const placesApi = {
   autocomplete: (input, locationBias) => api.post('/places/autocomplete', { input, locationBias }),
   getPhotos: (name, address, placeId) => api.get('/places/photos', { params: { name, address, placeId } }),
   getDetails: (placeId) => api.get(`/places/details/${placeId}`),
+  enrich: (name, address) => api.post('/places/enrich', { name, address }),
 };
 
 export const locationsApi = {
   getByTrip: (tripId) => api.get(`/trips/${tripId}/locations`)
 };
+
+export const researchApi = {
+  getIdeas: (tripId) => api.get(`/research/${tripId}/ideas`),
+  saveIdea: (tripId, data) => api.post(`/research/${tripId}/ideas`, data),
+  deleteIdea: (id) => api.delete(`/research/ideas/${id}`),
+  reorderIdeas: (tripId, ids) => api.put(`/research/${tripId}/ideas/reorder`, { ideaIds: ids }),
+  getSummary: (tripId) => api.get(`/research/${tripId}/summary`),
+  saveSummary: (tripId, summary) => api.put(`/research/${tripId}/summary`, { summary }),
+};
+
+export async function* streamResearch(tripId, body) {
+  const response = await fetch(`/api/research/${tripId}/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: body.signal,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Stream request failed' }));
+    throw new Error(err.error || 'Stream request failed');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    let currentEvent = null;
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        currentEvent = line.slice(7).trim();
+      } else if (line.startsWith('data: ') && currentEvent) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          yield { event: currentEvent, data };
+        } catch {}
+        currentEvent = null;
+      } else if (line === '') {
+        currentEvent = null;
+      }
+    }
+  }
+}
 
 export default api;
