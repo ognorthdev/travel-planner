@@ -105,6 +105,8 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
             savedIds={savedNames}
             onToggleSave={handleToggleSave}
             onBubbleClick={setDetailSuggestion}
+            tripId={tripId}
+            destination={destination}
           />
         </div>
       </div>
@@ -113,6 +115,8 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
         <SuggestionDetailModal
           suggestion={detailSuggestion}
           onClose={() => setDetailSuggestion(null)}
+          tripId={tripId}
+          destination={destination}
         />
       )}
     </div>

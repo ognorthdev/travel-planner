@@ -38,7 +38,12 @@ function buildGoogleMapsUrl(name, address) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
-export default function SuggestionDetailModal({ suggestion, onClose }) {
+function buildTikTokSearchUrl(name, destination) {
+  const query = `${destination} ${name}`.trim();
+  return `https://www.tiktok.com/search?q=${encodeURIComponent(query)}`;
+}
+
+export default function SuggestionDetailModal({ suggestion, onClose, tripId, destination }) {
   const config = TYPE_CONFIG[suggestion.type] || TYPE_CONFIG.ACTIVITY;
   const Icon = config.icon;
   const data = suggestion.data || {};
@@ -46,7 +51,7 @@ export default function SuggestionDetailModal({ suggestion, onClose }) {
   const [enriched, setEnriched] = useState(null);
 
   useEffect(() => {
-    placesApi.enrich(suggestion.name, data.address || '')
+    placesApi.enrich(suggestion.name, data.address || '', tripId)
       .then(result => setEnriched(result))
       .catch(() => {});
   }, [suggestion.name, data.address]);
@@ -112,17 +117,30 @@ export default function SuggestionDetailModal({ suggestion, onClose }) {
             </div>
           )}
 
-          {address && (
-            <a
-              href={googleMapsUrl || buildGoogleMapsUrl(suggestion.name, address)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-xs font-medium text-ocean-400 hover:text-ocean-300 transition-colors"
-            >
-              <ExternalLink size={12} />
-              View on Google Maps
-            </a>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {address && (
+              <a
+                href={googleMapsUrl || buildGoogleMapsUrl(suggestion.name, address)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-xs font-medium text-ocean-400 hover:text-ocean-300 transition-colors"
+              >
+                <ExternalLink size={12} />
+                View on Google Maps
+              </a>
+            )}
+            {destination && (
+              <a
+                href={buildTikTokSearchUrl(suggestion.name, destination)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-xs font-medium text-pink-400 hover:text-pink-300 transition-colors"
+              >
+                <ExternalLink size={12} />
+                Search on TikTok
+              </a>
+            )}
+          </div>
 
           {/* Photos */}
           {photos.length > 0 && (

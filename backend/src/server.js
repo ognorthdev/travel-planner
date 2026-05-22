@@ -8,6 +8,7 @@ const slotsRouter = require('./routes/slots');
 const aiRouter = require('./routes/ai');
 const placesRouter = require('./routes/places');
 const researchRouter = require('./routes/research');
+const costsRouter = require('./routes/costs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,7 @@ app.use('/api', slotsRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/places', placesRouter);
 app.use('/api/research', researchRouter);
+app.use('/api/costs', costsRouter);
 
 // Global error handler
 app.use((err, req, res, next) => {

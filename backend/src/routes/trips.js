@@ -10,10 +10,20 @@ router.get('/', async (req, res, next) => {
     const trips = await prisma.trip.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
-        _count: { select: { days: true } }
+        _count: { select: { days: true } },
+        apiCosts: { select: { costCents: true, service: true } },
       }
     });
-    res.json(trips);
+    const tripsWithCosts = trips.map(trip => {
+      const totalCostCents = trip.apiCosts.reduce((sum, c) => sum + c.costCents, 0);
+      const costByService = {};
+      for (const c of trip.apiCosts) {
+        costByService[c.service] = (costByService[c.service] || 0) + c.costCents;
+      }
+      const { apiCosts, ...rest } = trip;
+      return { ...rest, totalCostCents, costByService };
+    });
+    res.json(tripsWithCosts);
   } catch (err) {
     next(err);
   }

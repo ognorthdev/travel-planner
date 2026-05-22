@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { recordCost, calculatePlacesCost } = require('../costs');
 
 // Conditionally load AI SDKs
 let anthropic = null;
@@ -30,20 +31,33 @@ async function askClaude(prompt, maxTokens = 1024) {
     max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }]
   });
-  return message.content[0].text;
+  return {
+    text: message.content[0].text,
+    inputTokens: message.usage?.input_tokens || 0,
+    outputTokens: message.usage?.output_tokens || 0,
+    model: 'claude-sonnet-4-6',
+    service: 'claude',
+  };
 }
 
 async function askGemini(prompt) {
   if (!genAI) throw new Error('Gemini API key not configured');
   const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
   const result = await model.generateContent(prompt);
-  return result.response.text();
+  const usage = result.response.usageMetadata;
+  return {
+    text: result.response.text(),
+    inputTokens: usage?.promptTokenCount || 0,
+    outputTokens: usage?.candidatesTokenCount || 0,
+    model: 'gemini-3-flash-preview',
+    service: 'gemini',
+  };
 }
 
 // POST /api/ai/suggest-meal
 router.post('/suggest-meal', async (req, res, next) => {
   try {
-    const { destination, mealType, cuisinePreferences, budget, notes } = req.body;
+    const { destination, mealType, cuisinePreferences, budget, notes, tripId } = req.body;
 
     if (!destination || !mealType) {
       return res.status(400).json({ error: 'destination and mealType are required' });
@@ -69,17 +83,18 @@ Respond with a JSON object (no markdown, pure JSON) with these fields:
     let source = 'placeholder';
 
     try {
-      const text = await askClaude(prompt);
-      suggestion = JSON.parse(text);
+      const result = await askClaude(prompt);
+      suggestion = JSON.parse(result.text);
       source = 'claude';
+      recordCost({ tripId, service: result.service, operation: 'suggest-meal', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
     } catch (e) {
       try {
-        const text = await askGemini(prompt);
-        const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const result = await askGemini(prompt);
+        const cleaned = result.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
         suggestion = JSON.parse(cleaned);
         source = 'gemini';
+        recordCost({ tripId, service: result.service, operation: 'suggest-meal', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
       } catch (e2) {
-        // Return placeholder data
         suggestion = {
           restaurantName: `A Great ${mealType} Spot in ${destination}`,
           cuisine: cuisinePreferences || 'Local',
@@ -102,7 +117,7 @@ Respond with a JSON object (no markdown, pure JSON) with these fields:
 // POST /api/ai/suggest-activity
 router.post('/suggest-activity', async (req, res, next) => {
   try {
-    const { destination, category, duration, notes } = req.body;
+    const { destination, category, duration, notes, tripId } = req.body;
 
     if (!destination) {
       return res.status(400).json({ error: 'destination is required' });
@@ -129,15 +144,17 @@ Respond with a JSON object (no markdown, pure JSON) with these fields:
     let source = 'placeholder';
 
     try {
-      const text = await askClaude(prompt);
-      suggestion = JSON.parse(text);
+      const result = await askClaude(prompt);
+      suggestion = JSON.parse(result.text);
       source = 'claude';
+      recordCost({ tripId, service: result.service, operation: 'suggest-activity', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
     } catch (e) {
       try {
-        const text = await askGemini(prompt);
-        const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const result = await askGemini(prompt);
+        const cleaned = result.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
         suggestion = JSON.parse(cleaned);
         source = 'gemini';
+        recordCost({ tripId, service: result.service, operation: 'suggest-activity', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
       } catch (e2) {
         suggestion = {
           activityName: `Explore ${destination}`,
@@ -162,7 +179,7 @@ Respond with a JSON object (no markdown, pure JSON) with these fields:
 // POST /api/ai/search-hotel
 router.post('/search-hotel', async (req, res, next) => {
   try {
-    const { destination, checkIn, checkOut, budget, preferences, notes } = req.body;
+    const { destination, checkIn, checkOut, budget, preferences, notes, tripId } = req.body;
 
     if (!destination) {
       return res.status(400).json({ error: 'destination is required' });
@@ -191,15 +208,17 @@ Respond with a JSON object (no markdown, pure JSON) with these fields:
     let source = 'placeholder';
 
     try {
-      const text = await askClaude(prompt);
-      suggestion = JSON.parse(text);
+      const result = await askClaude(prompt);
+      suggestion = JSON.parse(result.text);
       source = 'claude';
+      recordCost({ tripId, service: result.service, operation: 'search-hotel', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
     } catch (e) {
       try {
-        const text = await askGemini(prompt);
-        const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const result = await askGemini(prompt);
+        const cleaned = result.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
         suggestion = JSON.parse(cleaned);
         source = 'gemini';
+        recordCost({ tripId, service: result.service, operation: 'search-hotel', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
       } catch (e2) {
         suggestion = {
           hotelName: `Premier Hotel ${destination}`,
@@ -405,7 +424,7 @@ Return ONLY valid JSON, no markdown, no code fences:
 // POST /api/ai/discover - Discover restaurants or activities near a location
 router.post('/discover', async (req, res, next) => {
   try {
-    const { location, slotType, description, destination, excludeNames } = req.body;
+    const { location, slotType, description, destination, excludeNames, tripId } = req.body;
     if (!location || !slotType || !destination) {
       return res.status(400).json({ error: 'location, slotType, and destination are required' });
     }
@@ -441,9 +460,12 @@ router.post('/discover', async (req, res, next) => {
     });
 
     // Step 3: Resolve photos for each place (in parallel)
+    let photoApiCalls = 0;
     const placesWithPhotos = await Promise.all(
       filteredPlaces.map(async (place) => {
-        const photos = place.photos ? await resolvePhotoUrls(place.photos, 4) : [];
+        const photoSlice = (place.photos || []).slice(0, 4);
+        photoApiCalls += photoSlice.length;
+        const photos = photoSlice.length > 0 ? await resolvePhotoUrls(place.photos, 4) : [];
         return {
           name: place.displayName?.text || '',
           address: place.formattedAddress || '',
@@ -458,6 +480,14 @@ router.post('/discover', async (req, res, next) => {
         };
       })
     );
+
+    // Record Google Places costs (geocode + search + photos)
+    const placesCost = calculatePlacesCost([
+      { type: 'geocode', count: 1 },
+      { type: 'text-search', count: 1 },
+      { type: 'photo-media', count: photoApiCalls },
+    ]);
+    recordCost({ tripId, service: 'google-places', operation: 'discover', costCents: placesCost });
 
     // Step 4: AI augmentation — get rich descriptions, tips, dishes
     const cleanJson = (text) => {
@@ -474,13 +504,15 @@ router.post('/discover', async (req, res, next) => {
     let augmentData = null;
 
     try {
-      const text = await askGemini(augmentPrompt);
-      augmentData = JSON.parse(cleanJson(text));
+      const result = await askGemini(augmentPrompt);
+      augmentData = JSON.parse(cleanJson(result.text));
+      recordCost({ tripId, service: result.service, operation: 'discover-augment', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
     } catch (e) {
       console.error('Gemini augmentation failed:', e.message);
       try {
-        const text = await askClaude(augmentPrompt, 8192);
-        augmentData = JSON.parse(cleanJson(text));
+        const result = await askClaude(augmentPrompt, 8192);
+        augmentData = JSON.parse(cleanJson(result.text));
+        recordCost({ tripId, service: result.service, operation: 'discover-augment', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
       } catch (e2) {
         console.error('Claude augmentation failed:', e2.message);
       }

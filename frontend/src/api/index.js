@@ -54,17 +54,17 @@ export const slotsApi = {
 
 // AI
 export const aiApi = {
-  suggestMeal: (data) => api.post('/ai/suggest-meal', data),
-  suggestActivity: (data) => api.post('/ai/suggest-activity', data),
-  searchHotel: (data) => api.post('/ai/search-hotel', data),
-  discover: (data) => api.post('/ai/discover', data, { timeout: 120000 }),
+  suggestMeal: (data) => api.post('/ai/suggest-meal', data).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
+  suggestActivity: (data) => api.post('/ai/suggest-activity', data).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
+  searchHotel: (data) => api.post('/ai/search-hotel', data).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
+  discover: (data) => api.post('/ai/discover', data, { timeout: 120000 }).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
 };
 
 export const placesApi = {
-  autocomplete: (input, locationBias) => api.post('/places/autocomplete', { input, locationBias }),
-  getPhotos: (name, address, placeId) => api.get('/places/photos', { params: { name, address, placeId } }),
-  getDetails: (placeId) => api.get(`/places/details/${placeId}`),
-  enrich: (name, address) => api.post('/places/enrich', { name, address }),
+  autocomplete: (input, locationBias, tripId) => api.post('/places/autocomplete', { input, locationBias, tripId }),
+  getPhotos: (name, address, placeId, tripId) => api.get('/places/photos', { params: { name, address, placeId, tripId } }),
+  getDetails: (placeId, tripId) => api.get(`/places/details/${placeId}`, { params: { tripId } }),
+  enrich: (name, address, tripId) => api.post('/places/enrich', { name, address, tripId }),
 };
 
 export const locationsApi = {
@@ -78,6 +78,10 @@ export const researchApi = {
   reorderIdeas: (tripId, ids) => api.put(`/research/${tripId}/ideas/reorder`, { ideaIds: ids }),
   getSummary: (tripId) => api.get(`/research/${tripId}/summary`),
   saveSummary: (tripId, summary) => api.put(`/research/${tripId}/summary`, { summary }),
+};
+
+export const costsApi = {
+  getByTrip: (tripId) => api.get(`/costs/${tripId}/costs`),
 };
 
 export async function* streamResearch(tripId, body) {
@@ -112,6 +116,9 @@ export async function* streamResearch(tripId, body) {
       } else if (line.startsWith('data: ') && currentEvent) {
         try {
           const data = JSON.parse(line.slice(6));
+          if (currentEvent === 'done') {
+            window.dispatchEvent(new CustomEvent('cost-updated'));
+          }
           yield { event: currentEvent, data };
         } catch {}
         currentEvent = null;

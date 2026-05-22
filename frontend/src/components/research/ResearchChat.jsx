@@ -119,7 +119,6 @@ export default function ResearchChat({ tripId, destination, onSuggestion }) {
     });
     setStreaming(false);
     setStatus(null);
-    setMode('flash');
     abortRef.current = null;
   }, [streaming, messages, mode, tripId, destination, onSuggestion]);
 
@@ -140,24 +139,19 @@ export default function ResearchChat({ tripId, destination, onSuggestion }) {
             <h3 className="text-lg font-semibold text-slate-200 mb-2">Research your trip</h3>
             <p className="text-sm text-slate-400 max-w-md">
               Ask about restaurants, activities, and hidden gems in {destination}.
-              Use <span className="text-amber-400">Flash</span> for quick questions
-              or <span className="text-violet-400">Deep Research</span> for thorough exploration.
+              Use <span className="text-violet-400">Web Research</span> for live web search,{' '}
+              <span className="text-emerald-400">Maps Research</span> for places and routes,{' '}
+              or <span className="text-ocean-400">Questions</span> for quick answers.
             </p>
           </div>
         )}
         {messages.map(msg => (
           <ChatMessage key={msg.id} message={msg} />
         ))}
-        {streaming && status === 'researching' && mode === 'deep' && (
+        {streaming && status === 'researching' && (
           <div className="flex items-center gap-2 px-4 py-2 text-xs text-violet-400">
             <Loader2 size={12} className="animate-spin" />
-            Deep Research in progress — {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')} elapsed
-          </div>
-        )}
-        {streaming && status === 'summarizing' && (
-          <div className="flex items-center gap-2 px-4 py-2 text-xs text-violet-400">
-            <Loader2 size={12} className="animate-spin" />
-            Preparing your summary...
+            {mode === 'web' ? 'Searching the web...' : mode === 'maps' ? 'Searching maps...' : 'Thinking...'}
           </div>
         )}
         {streaming && status === 'retrying' && (

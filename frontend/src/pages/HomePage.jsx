@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, MapPin, Calendar, Plane, X, Loader2, Globe } from 'lucide-react';
 import { tripsApi } from '../api/index.js';
+import { InlineCost } from '../components/CostBadge';
 
 const DESTINATION_EMOJIS = {
   paris: '🗼', france: '🗼',
@@ -96,9 +97,12 @@ function TripCard({ trip, index, onClick }) {
           <span className="text-xs">{formatDateRange(trip.startDate, trip.endDate)}</span>
         </div>
         <div className="mt-3 pt-3 border-t border-slate-700 flex items-center justify-between">
-          <span className="text-xs text-slate-500">
-            {trip._count?.days || 0} {trip._count?.days === 1 ? 'day planned' : 'days planned'}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">
+              {trip._count?.days || 0} {trip._count?.days === 1 ? 'day planned' : 'days planned'}
+            </span>
+            <InlineCost totalCostCents={trip.totalCostCents} costByService={trip.costByService} />
+          </div>
           <span className="text-xs font-semibold text-ocean-400 group-hover:text-ocean-300">
             View trip →
           </span>

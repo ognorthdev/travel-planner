@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { recordCost, calculatePlacesCost } = require('../costs');
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
@@ -64,6 +65,9 @@ router.post('/autocomplete', async (req, res, next) => {
 
     const data = await response.json();
 
+    const tripId = req.body.tripId;
+    recordCost({ tripId, service: 'google-places', operation: 'autocomplete', costCents: calculatePlacesCost([{ type: 'autocomplete', count: 1 }]) });
+
     const predictions = (data.suggestions || [])
       .filter(s => s.placePrediction)
       .map(s => ({
@@ -86,12 +90,14 @@ router.get('/photos', async (req, res, next) => {
       return res.json({ photos: [] });
     }
 
-    const { name, address, placeId } = req.query;
+    const { name, address, placeId, tripId } = req.query;
     let resolvedPlaceId = placeId;
     let photos = [];
+    const ops = [];
 
     // Try Place Details first if we have a placeId
     if (resolvedPlaceId && resolvedPlaceId !== 'null') {
+      ops.push({ type: 'place-details', count: 1 });
       try {
         const detailUrl = `https://places.googleapis.com/v1/places/${resolvedPlaceId}`;
         const detailRes = await fetch(detailUrl, {
@@ -106,6 +112,7 @@ router.get('/photos', async (req, res, next) => {
           const detailData = await detailRes.json();
           const photoRefs = (detailData.photos || []).slice(0, 2);
           if (photoRefs.length > 0) {
+            ops.push({ type: 'photo-media', count: photoRefs.length });
             photos = await resolvePhotoUrls(photoRefs);
           }
         }
@@ -116,6 +123,7 @@ router.get('/photos', async (req, res, next) => {
 
     // Fall back to Text Search if Place Details yielded no photos
     if (photos.length === 0 && name) {
+      ops.push({ type: 'text-search', count: 1 });
       const query = `${name} ${address || ''}`.trim();
       const searchUrl = `https://places.googleapis.com/v1/places:searchText`;
       const searchRes = await fetch(searchUrl, {
@@ -135,10 +143,15 @@ router.get('/photos', async (req, res, next) => {
           resolvedPlaceId = place.id;
           const photoRefs = (place.photos || []).slice(0, 2);
           if (photoRefs.length > 0) {
+            ops.push({ type: 'photo-media', count: photoRefs.length });
             photos = await resolvePhotoUrls(photoRefs);
           }
         }
       }
+    }
+
+    if (ops.length > 0) {
+      recordCost({ tripId, service: 'google-places', operation: 'photos', costCents: calculatePlacesCost(ops) });
     }
 
     res.json({ photos, placeId: resolvedPlaceId });
@@ -155,6 +168,7 @@ router.get('/details/:placeId', async (req, res, next) => {
     }
 
     const { placeId } = req.params;
+    const tripId = req.query.tripId;
     const url = `https://places.googleapis.com/v1/places/${placeId}`;
     const response = await fetch(url, {
       method: 'GET',
@@ -163,6 +177,8 @@ router.get('/details/:placeId', async (req, res, next) => {
         'X-Goog-FieldMask': 'formattedAddress,nationalPhoneNumber,internationalPhoneNumber',
       },
     });
+
+    recordCost({ tripId, service: 'google-places', operation: 'place-details', costCents: calculatePlacesCost([{ type: 'place-details', count: 1 }]) });
 
     if (!response.ok) {
       const err = await response.text();
@@ -187,7 +203,7 @@ router.post('/enrich', async (req, res, next) => {
       return res.json({ photos: [], rating: null, reviewCount: null });
     }
 
-    const { name, address } = req.body;
+    const { name, address, tripId } = req.body;
     if (!name) return res.json({ photos: [], rating: null, reviewCount: null });
 
     const query = `${name} ${address || ''}`.trim();
@@ -201,18 +217,25 @@ router.post('/enrich', async (req, res, next) => {
       body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
     });
 
+    const ops = [{ type: 'text-search', count: 1 }];
+
     if (!searchRes.ok) {
+      recordCost({ tripId, service: 'google-places', operation: 'enrich', costCents: calculatePlacesCost(ops) });
       return res.json({ photos: [], rating: null, reviewCount: null });
     }
 
     const searchData = await searchRes.json();
     const place = searchData.places?.[0];
     if (!place) {
+      recordCost({ tripId, service: 'google-places', operation: 'enrich', costCents: calculatePlacesCost(ops) });
       return res.json({ photos: [], rating: null, reviewCount: null });
     }
 
     const photoRefs = (place.photos || []).slice(0, 4);
+    if (photoRefs.length > 0) ops.push({ type: 'photo-media', count: photoRefs.length });
     const photos = photoRefs.length > 0 ? await resolvePhotoUrls(photoRefs) : [];
+
+    recordCost({ tripId, service: 'google-places', operation: 'enrich', costCents: calculatePlacesCost(ops) });
 
     res.json({
       photos,

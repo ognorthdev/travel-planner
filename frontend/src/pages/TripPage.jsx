@@ -7,6 +7,7 @@ import {
 import { tripsApi, daysApi, slotsApi, researchApi } from '../api/index.js';
 import ResearchBottomPanel from '../components/research/ResearchBottomPanel';
 import ResearchOverlay from '../components/research/ResearchOverlay';
+import CostBadge from '../components/CostBadge';
 
 const SLOT_CONFIG = {
   HOTEL: {
@@ -198,13 +199,13 @@ function DayColumn({ day, tripId, onAddSlot, onDeleteSlot, onDeleteDay, onReorde
   const handleSlotDragOver = (e, index) => {
     e.preventDefault();
     e.stopPropagation();
-    e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.dropEffect = e.dataTransfer.effectAllowed === 'copy' ? 'copy' : 'move';
     setDropIndex(index);
   };
 
   const handleColumnDragOver = (e) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.dropEffect = e.dataTransfer.effectAllowed === 'copy' ? 'copy' : 'move';
     if (dropIndex === null && day.slots?.length === 0) {
       setDropIndex(0);
     }
@@ -654,6 +655,7 @@ export default function TripPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <CostBadge tripId={tripId} />
               <button
                 onClick={handleAddDay}
                 disabled={addingDay}

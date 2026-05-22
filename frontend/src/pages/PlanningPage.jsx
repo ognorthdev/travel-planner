@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, MarkerF, InfoWindowF } from '@react-google-maps/api';
 import { slotsApi, tripsApi, aiApi, locationsApi, placesApi } from '../api/index.js';
+import CostBadge from '../components/CostBadge';
 
 function buildGoogleMapsUrl(name, address) {
   return `https://www.google.com/maps/search/${encodeURIComponent(name + ', ' + address)}`;
@@ -316,14 +317,14 @@ function DiscoveryPhase({ tripId, slotId, slotType, destination }) {
     }
     autocompleteTimer.current = setTimeout(async () => {
       try {
-        const data = await placesApi.autocomplete(locationInput);
+        const data = await placesApi.autocomplete(locationInput, null, tripId);
         setGooglePredictions(data.predictions || []);
       } catch {
         setGooglePredictions([]);
       }
     }, 300);
     return () => { if (autocompleteTimer.current) clearTimeout(autocompleteTimer.current); };
-  }, [locationInput]);
+  }, [locationInput, tripId]);
 
   const filteredLocations = planLocations.filter(loc =>
     loc.label.toLowerCase().includes(locationInput.toLowerCase()) ||
@@ -344,7 +345,8 @@ function DiscoveryPhase({ tripId, slotId, slotType, destination }) {
         location: locationInput,
         slotType,
         description,
-        destination
+        destination,
+        tripId
       });
       if (data && data.startLocation && Array.isArray(data.results)) {
         const startLat = parseFloat(data.startLocation.lat);
@@ -388,6 +390,7 @@ function DiscoveryPhase({ tripId, slotId, slotType, destination }) {
         description,
         destination,
         excludeNames: existingNames,
+        tripId
       });
       if (data && Array.isArray(data.results)) {
         const newResults = data.results.filter(r => {
@@ -1041,7 +1044,7 @@ function ActivityForm({ data, onChange, destination, onAISuggest, aiLoading }) {
   );
 }
 
-function HotelNameField({ value, onChange, onSelect }) {
+function HotelNameField({ value, onChange, onSelect, tripId }) {
   const [input, setInput] = useState(value || '');
   const [predictions, setPredictions] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -1065,14 +1068,14 @@ function HotelNameField({ value, onChange, onSelect }) {
     timerRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const data = await placesApi.autocomplete(input);
+        const data = await placesApi.autocomplete(input, null, tripId);
         setPredictions(data.predictions || []);
         setShowDropdown(true);
       } catch { setPredictions([]); }
       finally { setLoading(false); }
     }, 300);
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [input]);
+  }, [input, tripId]);
 
   const handleSelect = async (prediction) => {
     setInput(prediction.mainText || prediction.description);
@@ -1081,7 +1084,7 @@ function HotelNameField({ value, onChange, onSelect }) {
     setPredictions([]);
     if (prediction.placeId) {
       try {
-        const details = await placesApi.getDetails(prediction.placeId);
+        const details = await placesApi.getDetails(prediction.placeId, tripId);
         onSelect(details);
       } catch { /* keep typed text, no autofill */ }
     }
@@ -1124,7 +1127,7 @@ function HotelNameField({ value, onChange, onSelect }) {
   );
 }
 
-function HotelForm({ data, onChange }) {
+function HotelForm({ data, onChange, tripId }) {
   const handlePlaceSelect = (details) => {
     onChange({
       ...data,
@@ -1139,6 +1142,7 @@ function HotelForm({ data, onChange }) {
         value={data.hotelName}
         onChange={v => onChange({ ...data, hotelName: v })}
         onSelect={handlePlaceSelect}
+        tripId={tripId}
       />
       <InputField label="Address" icon={MapPin} value={data.address} onChange={v => onChange({ ...data, address: v })} placeholder="Hotel address" />
       <div className="grid grid-cols-2 gap-4">
@@ -1228,9 +1232,10 @@ export default function PlanningPage() {
     setAiSuggestion(null);
     try {
       let result;
-      if (isMeal) result = await aiApi.suggestMeal(params);
-      else if (slotType === 'ACTIVITY') result = await aiApi.suggestActivity(params);
-      else if (slotType === 'HOTEL') result = await aiApi.searchHotel(params);
+      const paramsWithTrip = { ...params, tripId };
+      if (isMeal) result = await aiApi.suggestMeal(paramsWithTrip);
+      else if (slotType === 'ACTIVITY') result = await aiApi.suggestActivity(paramsWithTrip);
+      else if (slotType === 'HOTEL') result = await aiApi.searchHotel(paramsWithTrip);
       if (result) { setAiSuggestion(result.suggestion); setAiSource(result.source); }
     } catch (err) {
       console.error('AI suggestion failed:', err);
@@ -1353,12 +1358,15 @@ export default function PlanningPage() {
                 <p className="text-xs text-slate-400">{trip?.name} · {destination}{currentDay ? ` · Day ${currentDay.dayNumber}` : ''}</p>
               </div>
             </div>
-            {!showPhases && (
-              <div className="flex items-center gap-2 text-sm text-slate-400">
-                {saving && <><Loader2 size={14} className="animate-spin" /><span>Saving...</span></>}
-                {saved && !saving && <><Check size={14} className="text-green-400" /><span className="text-green-400">Saved</span></>}
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <CostBadge tripId={tripId} />
+              {!showPhases && (
+                <div className="flex items-center gap-2 text-sm text-slate-400">
+                  {saving && <><Loader2 size={14} className="animate-spin" /><span>Saving...</span></>}
+                  {saved && !saving && <><Check size={14} className="text-green-400" /><span className="text-green-400">Saved</span></>}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -1475,7 +1483,7 @@ export default function PlanningPage() {
                   </div>
                 </div>
                 <div className="p-6">
-                  <HotelForm data={formData} onChange={setFormData} />
+                  <HotelForm data={formData} onChange={setFormData} tripId={tripId} />
                 </div>
               </div>
 

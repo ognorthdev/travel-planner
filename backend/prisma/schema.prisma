@@ -19,6 +19,20 @@ model Trip {
   days          Day[]
   ideas         Idea[]
   chatSummary   ChatSummary?
+  apiCosts      ApiCost[]
+}
+
+model ApiCost {
+  id           String   @id @default(cuid())
+  tripId       String
+  service      String
+  operation    String
+  model        String?
+  costCents    Float    @default(0)
+  inputTokens  Int?
+  outputTokens Int?
+  createdAt    DateTime @default(now())
+  trip         Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
 }
 
 model Day {

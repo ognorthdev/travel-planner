@@ -38,7 +38,12 @@ function buildGoogleMapsUrl(name, address) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
-export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, onClick, style }) {
+function buildTikTokSearchUrl(name, destination) {
+  const query = `${destination} ${name}`.trim();
+  return `https://www.tiktok.com/search?q=${encodeURIComponent(query)}`;
+}
+
+export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, onClick, style, tripId, destination }) {
   const config = TYPE_CONFIG[suggestion.type] || TYPE_CONFIG.ACTIVITY;
   const Icon = config.icon;
   const data = suggestion.data || {};
@@ -50,7 +55,7 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
   useEffect(() => {
     if (enriching || enriched) return;
     setEnriching(true);
-    placesApi.enrich(suggestion.name, address)
+    placesApi.enrich(suggestion.name, address, tripId)
       .then(result => setEnriched(result))
       .catch(() => setEnriched(null))
       .finally(() => setEnriching(false));
@@ -110,19 +115,33 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
             </div>
           )}
 
-          {/* Google Maps link */}
-          {enrichedAddress && (
-            <a
-              href={googleMapsUrl || buildGoogleMapsUrl(suggestion.name, enrichedAddress)}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 mt-1.5 px-2 py-1 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-[10px] font-medium text-ocean-400 hover:text-ocean-300 transition-colors"
-            >
-              <ExternalLink size={10} />
-              Google Maps
-            </a>
-          )}
+          {/* External links */}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            {enrichedAddress && (
+              <a
+                href={googleMapsUrl || buildGoogleMapsUrl(suggestion.name, enrichedAddress)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-[10px] font-medium text-ocean-400 hover:text-ocean-300 transition-colors"
+              >
+                <ExternalLink size={10} />
+                Google Maps
+              </a>
+            )}
+            {destination && (
+              <a
+                href={buildTikTokSearchUrl(suggestion.name, destination)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg text-[10px] font-medium text-pink-400 hover:text-pink-300 transition-colors"
+              >
+                <ExternalLink size={10} />
+                TikTok
+              </a>
+            )}
+          </div>
 
           {/* Photos */}
           {photos.length > 0 && (

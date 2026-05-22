@@ -1,21 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
+const { recordCost } = require('../costs');
 
 const prisma = new PrismaClient();
 
-// Deep Research client (@google/genai — Interactions API)
-let deepResearchClient = null;
+// Anthropic client
+let anthropic = null;
 try {
-  const { GoogleGenAI } = require('@google/genai');
-  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here') {
-    deepResearchClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const Anthropic = require('@anthropic-ai/sdk');
+  if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your_anthropic_api_key_here') {
+    anthropic = new Anthropic.default({ apiKey: process.env.ANTHROPIC_API_KEY });
   }
 } catch (e) {
-  console.warn('@google/genai SDK not available for Deep Research');
+  console.warn('Anthropic SDK not available for research');
 }
 
-// Flash client (@google/generative-ai — generateContent)
+// Gemini client (@google/generative-ai — generateContent)
 let flashGenAI = null;
 try {
   const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -23,7 +24,7 @@ try {
     flashGenAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   }
 } catch (e) {
-  console.warn('Google Generative AI SDK not available for Flash');
+  console.warn('Google Generative AI SDK not available');
 }
 
 function sendSSE(res, event, data) {
@@ -81,45 +82,17 @@ ${text}
 """`;
 }
 
-async function summarizeResearch(text, destination, query) {
-  if (!flashGenAI) return null;
-  try {
-    const model = flashGenAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent(
-      `You are a friendly travel assistant. Summarize the research about ${destination} for the question: "${query}"
-
-Output format — a SHORT bulleted list:
-- **Place Name** — one sentence on why it's worth visiting
-- **Place Name** — one sentence on why it's worth visiting
-- (repeat for each recommendation)
-
-Rules:
-- List EVERY specific place mentioned in the research — do not skip any
-- Each entry is exactly one line: bold name + one-sentence reason
-- No introductory paragraph, no closing paragraph, no section headers
-- No addresses, prices, or hours (those go in the cards)
-- No citations, footnotes, or source references
-- Maximum 2 sentences total outside the list (if absolutely needed for context)
-
-Research text:
-"""
-${text.slice(0, 12000)}
-"""`
-    );
-    return result.response.text();
-  } catch (e) {
-    console.error('Research summarization failed:', e.message);
-    return null;
-  }
-}
-
-async function extractSuggestions(text, destination) {
-  if (!flashGenAI) return [];
-  const model = flashGenAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+async function extractSuggestions(text, destination, tripId) {
+  if (!anthropic) return [];
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const result = await model.generateContent(buildExtractionPrompt(text.slice(0, 30000), destination));
-      const responseText = result.response.text();
+      const message = await anthropic.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: buildExtractionPrompt(text.slice(0, 30000), destination) }],
+      });
+      recordCost({ tripId, service: 'claude', operation: 'research-extract', model: 'claude-sonnet-4-6', inputTokens: message.usage?.input_tokens || 0, outputTokens: message.usage?.output_tokens || 0 });
+      const responseText = message.content[0].text;
       const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       const firstBrace = cleaned.indexOf('{');
       const lastBrace = cleaned.lastIndexOf('}');
@@ -280,19 +253,16 @@ router.post('/:tripId/stream', async (req, res) => {
   });
 
   let closed = false;
-  let activeInteractionId = null;
-  res.on('close', () => {
-    closed = true;
-    if (activeInteractionId && deepResearchClient) {
-      deepResearchClient.interactions.cancel(activeInteractionId).catch(() => {});
-    }
-  });
+  res.on('close', () => { closed = true; });
 
+  const tripId = req.params.tripId;
   try {
-    if (mode === 'deep') {
-      await handleDeepResearch(res, query, messages, destination, () => closed, (id) => { activeInteractionId = id; });
+    if (mode === 'web') {
+      await handleWebResearch(res, query, messages, destination, () => closed, tripId);
+    } else if (mode === 'maps') {
+      await handleMapsResearch(res, query, messages, destination, () => closed, tripId);
     } else {
-      await handleFlashChat(res, query, messages, destination, () => closed);
+      await handleQuestions(res, query, messages, destination, () => closed, tripId);
     }
   } catch (err) {
     console.error('Stream error:', err);
@@ -307,19 +277,20 @@ router.post('/:tripId/stream', async (req, res) => {
   }
 });
 
-async function handleDeepResearch(res, query, messages, destination, isClosed, setInteractionId) {
-  if (!deepResearchClient) {
-    sendSSE(res, 'error', { message: 'Deep Research API not configured. Check your GEMINI_API_KEY.' });
+// Mode 1: Web Research — Claude Opus 4.7 with web search
+async function handleWebResearch(res, query, messages, destination, isClosed, tripId) {
+  if (!anthropic) {
+    sendSSE(res, 'error', { message: 'Anthropic API not configured. Check your ANTHROPIC_API_KEY.' });
     return;
   }
 
-  sendSSE(res, 'status', { phase: 'researching', elapsed: 0 });
+  sendSSE(res, 'status', { phase: 'researching' });
 
   const contextPrefix = messages && messages.length > 0
     ? `Context from our conversation so far:\n${messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n')}\n\n`
     : '';
 
-  const input = `${contextPrefix}Research the following about ${destination}: ${query}
+  const userPrompt = `${contextPrefix}Research the following about ${destination}: ${query}
 
 Requirements:
 - Provide at least 8-10 specific, named recommendations (restaurants, cafes, activities, experiences)
@@ -334,71 +305,71 @@ Requirements:
   * Any common complaints or caveats (e.g. long waits, closed certain days)
   * Estimated duration of visit (for activities)
 - Prioritize breadth: cover different neighborhoods, price points, and styles
-- Include both well-known spots and hidden gems`;
+- Include both well-known spots and hidden gems
+- Use web search to find current, accurate information`;
 
   try {
-    const interaction = await deepResearchClient.interactions.create({
-      agent: 'deep-research-preview-04-2026',
-      input,
-      background: true,
+    const stream = anthropic.messages.stream({
+      model: 'claude-opus-4-7',
+      max_tokens: 16000,
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 10 }],
+      messages: [{ role: 'user', content: userPrompt }],
     });
 
-    setInteractionId(interaction.id);
-    const startTime = Date.now();
-    const maxAttempts = 90;
-    const pollInterval = 10000;
+    let accumulatedText = '';
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await sleep(pollInterval);
+    stream.on('text', (text) => {
       if (isClosed()) return;
+      accumulatedText += text;
+      sendSSE(res, 'text', { content: text });
+    });
 
-      const result = await deepResearchClient.interactions.get(interaction.id);
-      const elapsed = Math.round((Date.now() - startTime) / 1000);
+    const finalMessage = await stream.finalMessage();
+    if (isClosed()) return;
 
-      if (result.status === 'completed') {
-        const outputStep = result.steps?.find(s => s.type === 'model_output');
-        const text = outputStep?.content?.map(p => p.text).join('') || '';
+    const inputTokens = finalMessage.usage?.input_tokens || 0;
+    const outputTokens = finalMessage.usage?.output_tokens || 0;
+    recordCost({ tripId, service: 'claude', operation: 'web-research', model: 'claude-opus-4-7', inputTokens, outputTokens });
 
-        if (text) {
-          sendSSE(res, 'status', { phase: 'summarizing' });
-          const summary = await summarizeResearch(text, destination, query);
-          sendSSE(res, 'text', { content: summary || text });
+    // Extract full text from all text content blocks (stream.on('text') may miss text after tool results)
+    const fullText = finalMessage.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('\n\n');
+    const textForExtraction = fullText.length > accumulatedText.length ? fullText : accumulatedText;
 
-          sendSSE(res, 'status', { phase: 'extracting' });
-          const suggestions = await extractSuggestions(text, destination);
-          for (const suggestion of suggestions) {
-            if (isClosed()) break;
-            sendSSE(res, 'suggestion', suggestion);
-            await sleep(200);
-          }
-        }
-
-        sendSSE(res, 'status', { phase: 'done' });
-        return;
+    // If streaming missed some text, send the remainder to the client
+    if (fullText.length > accumulatedText.length && !isClosed()) {
+      const missed = fullText.slice(accumulatedText.length);
+      if (missed.trim()) {
+        sendSSE(res, 'text', { content: missed });
       }
-
-      if (result.status === 'failed') {
-        sendSSE(res, 'error', { message: 'Deep Research failed. Please try again.' });
-        return;
-      }
-
-      sendSSE(res, 'status', { phase: 'researching', elapsed });
     }
 
-    sendSSE(res, 'error', { message: 'Deep Research timed out after 15 minutes. Please try a simpler query.' });
+    if (textForExtraction.length > 100) {
+      sendSSE(res, 'status', { phase: 'extracting' });
+      const suggestions = await extractSuggestions(textForExtraction, destination, tripId);
+      for (const suggestion of suggestions) {
+        if (isClosed()) break;
+        sendSSE(res, 'suggestion', suggestion);
+        await sleep(200);
+      }
+    }
+
+    sendSSE(res, 'status', { phase: 'done' });
   } catch (err) {
-    console.error('Deep Research error:', err);
-    const is503 = err.status === 503 || err.message?.includes('503');
-    const userMessage = is503
-      ? 'The AI model is experiencing high demand. Please try again in a moment.'
-      : 'Deep Research encountered an error. Please try again.';
+    console.error('Web Research error:', err);
+    const userMessage = err.status === 529 || err.status === 503
+      ? 'Claude is experiencing high demand. Please try again in a moment.'
+      : `Web Research encountered an error: ${err.message || 'Please try again.'}`;
     sendSSE(res, 'error', { message: userMessage });
   }
 }
 
-async function handleFlashChat(res, query, messages, destination, isClosed) {
+// Mode 2: Maps Research — Gemini 2.5 Flash with streaming
+async function handleMapsResearch(res, query, messages, destination, isClosed, tripId) {
   if (!flashGenAI) {
-    sendSSE(res, 'error', { message: 'Gemini Flash API not configured. Check your GEMINI_API_KEY.' });
+    sendSSE(res, 'error', { message: 'Gemini API not configured. Check your GEMINI_API_KEY.' });
     return;
   }
 
@@ -414,7 +385,7 @@ async function handleFlashChat(res, query, messages, destination, isClosed) {
   const chat = model.startChat({
     history: chatHistory,
     systemInstruction: {
-      parts: [{ text: `You are a travel research assistant helping plan a trip to ${destination}. For every recommendation you make, include: the full place name, full street address, price range, cuisine type or category, operating hours if known, 2-3 must-try dishes or highlights, and any practical tips or caveats. Aim for at least 5 specific named places per response. Be conversational and helpful.` }],
+      parts: [{ text: `You are a local travel expert and maps researcher for ${destination}. You specialize in finding specific places, routes, neighborhoods, and geographic recommendations. For every recommendation you make, include: the full place name, full street address, neighborhood/area, price range, cuisine type or category, operating hours if known, 2-3 must-try dishes or highlights, walking/transit directions from popular areas, and any practical tips or caveats. Aim for at least 5 specific named places per response. Include geographic context like nearby landmarks and how to get there.` }],
     },
   });
 
@@ -435,9 +406,13 @@ async function handleFlashChat(res, query, messages, destination, isClosed) {
 
       if (isClosed()) return;
 
+      const estimatedInputTokens = Math.ceil(query.length / 4);
+      const estimatedOutputTokens = Math.ceil(accumulatedText.length / 4);
+      recordCost({ tripId, service: 'gemini', operation: 'maps-research', model: 'gemini-2.5-flash', inputTokens: estimatedInputTokens, outputTokens: estimatedOutputTokens });
+
       if (accumulatedText.length > 100) {
         sendSSE(res, 'status', { phase: 'extracting' });
-        const suggestions = await extractSuggestions(accumulatedText, destination);
+        const suggestions = await extractSuggestions(accumulatedText, destination, tripId);
         for (const suggestion of suggestions) {
           if (isClosed()) break;
           sendSSE(res, 'suggestion', suggestion);
@@ -448,7 +423,7 @@ async function handleFlashChat(res, query, messages, destination, isClosed) {
       sendSSE(res, 'status', { phase: 'done' });
       return;
     } catch (err) {
-      console.error('Flash chat error:', err);
+      console.error('Maps Research error:', err);
       const is503 = err.status === 503 || err.message?.includes('503');
       if (is503 && attempt < maxRetries) {
         sendSSE(res, 'status', { phase: 'retrying' });
@@ -456,10 +431,70 @@ async function handleFlashChat(res, query, messages, destination, isClosed) {
         continue;
       }
       const userMessage = is503
-        ? 'The AI model is experiencing high demand. Please try again in a moment.'
-        : 'Something went wrong generating a response. Please try again.';
+        ? 'Gemini is experiencing high demand. Please try again in a moment.'
+        : `Maps Research encountered an error: ${err.message || 'Please try again.'}`;
       sendSSE(res, 'error', { message: userMessage });
     }
+  }
+}
+
+// Mode 3: Questions — Claude Sonnet 4.6 streaming
+async function handleQuestions(res, query, messages, destination, isClosed, tripId) {
+  if (!anthropic) {
+    sendSSE(res, 'error', { message: 'Anthropic API not configured. Check your ANTHROPIC_API_KEY.' });
+    return;
+  }
+
+  sendSSE(res, 'status', { phase: 'researching' });
+
+  const systemPrompt = `You are a travel research assistant helping plan a trip to ${destination}. For every recommendation you make, include: the full place name, full street address, price range, cuisine type or category, operating hours if known, 2-3 must-try dishes or highlights, and any practical tips or caveats. Aim for at least 5 specific named places per response. Be conversational and helpful.`;
+
+  const chatMessages = (messages || []).map(m => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: m.content,
+  }));
+  chatMessages.push({ role: 'user', content: query });
+
+  try {
+    const stream = anthropic.messages.stream({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: chatMessages,
+    });
+
+    let accumulatedText = '';
+
+    stream.on('text', (text) => {
+      if (isClosed()) return;
+      accumulatedText += text;
+      sendSSE(res, 'text', { content: text });
+    });
+
+    const finalMessage = await stream.finalMessage();
+    if (isClosed()) return;
+
+    const inputTokens = finalMessage.usage?.input_tokens || 0;
+    const outputTokens = finalMessage.usage?.output_tokens || 0;
+    recordCost({ tripId, service: 'claude', operation: 'questions-chat', model: 'claude-sonnet-4-6', inputTokens, outputTokens });
+
+    if (accumulatedText.length > 100) {
+      sendSSE(res, 'status', { phase: 'extracting' });
+      const suggestions = await extractSuggestions(accumulatedText, destination, tripId);
+      for (const suggestion of suggestions) {
+        if (isClosed()) break;
+        sendSSE(res, 'suggestion', suggestion);
+        await sleep(200);
+      }
+    }
+
+    sendSSE(res, 'status', { phase: 'done' });
+  } catch (err) {
+    console.error('Questions mode error:', err);
+    const userMessage = err.status === 529 || err.status === 503
+      ? 'Claude is experiencing high demand. Please try again in a moment.'
+      : `Something went wrong: ${err.message || 'Please try again.'}`;
+    sendSSE(res, 'error', { message: userMessage });
   }
 }
 
