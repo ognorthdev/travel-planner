@@ -63,7 +63,7 @@ export default function ChatInput({ onSend, disabled, mode, onModeChange }) {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={
-            mode === 'web' ? 'Research with live web search...' :
+            mode === 'web' ? 'Discover new activity/meal ideas...' :
             mode === 'maps' ? 'Find places, routes, neighborhoods...' :
             'Ask a quick question...'
           }

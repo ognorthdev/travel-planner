@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Compass, ChevronUp, ChevronDown, Lightbulb } from 'lucide-react';
 import IdeaBubble from './IdeaBubble';
 
-export default function ResearchBottomPanel({ ideas, onOpenResearch, onDeleteIdea }) {
+export default function ResearchBottomPanel({ ideas, onOpenResearch, onDeleteIdea, onClickIdea }) {
   const [expanded, setExpanded] = useState(true);
 
   return (
@@ -49,6 +49,7 @@ export default function ResearchBottomPanel({ ideas, onOpenResearch, onDeleteIde
                     key={idea.id}
                     idea={idea}
                     onDelete={onDeleteIdea}
+                    onClickIdea={onClickIdea}
                   />
                 ))}
               </div>

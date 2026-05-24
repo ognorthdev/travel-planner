@@ -1,74 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Plus, Calendar, MapPin, Loader2, Hotel, Coffee, Sun,
-  Moon, Utensils, ChevronRight, Trash2, X, AlertTriangle, Clock, GripVertical
+  ArrowLeft, Plus, Calendar, MapPin, Loader2,
+  Trash2, X, AlertTriangle, GripVertical, Settings
 } from 'lucide-react';
 import { tripsApi, daysApi, slotsApi, researchApi } from '../api/index.js';
 import ResearchBottomPanel from '../components/research/ResearchBottomPanel';
 import ResearchOverlay from '../components/research/ResearchOverlay';
+import SuggestionDetailModal from '../components/research/SuggestionDetailModal';
+import TripSettings from '../components/TripSettings.jsx';
 import CostBadge from '../components/CostBadge';
+import SlotCard from '../components/SlotCard.jsx';
+import SLOT_CONFIG from '../config/slotTypes.js';
 
-const SLOT_CONFIG = {
-  HOTEL: {
-    label: 'Hotel',
-    icon: Hotel,
-    color: 'text-purple-400',
-    bg: 'bg-purple-900/30',
-    border: 'border-purple-700/50',
-    dot: 'bg-purple-400',
-    addLabel: 'Add Hotel',
-    previewField: 'hotelName'
-  },
-  BREAKFAST: {
-    label: 'Breakfast',
-    icon: Coffee,
-    color: 'text-amber-400',
-    bg: 'bg-amber-900/30',
-    border: 'border-amber-700/50',
-    dot: 'bg-amber-400',
-    addLabel: 'Add Breakfast',
-    previewField: 'restaurantName'
-  },
-  LUNCH: {
-    label: 'Lunch',
-    icon: Utensils,
-    color: 'text-green-400',
-    bg: 'bg-green-900/30',
-    border: 'border-green-700/50',
-    dot: 'bg-green-400',
-    addLabel: 'Add Lunch',
-    previewField: 'restaurantName'
-  },
-  DINNER: {
-    label: 'Dinner',
-    icon: Moon,
-    color: 'text-indigo-400',
-    bg: 'bg-indigo-900/30',
-    border: 'border-indigo-700/50',
-    dot: 'bg-indigo-400',
-    addLabel: 'Add Dinner',
-    previewField: 'restaurantName'
-  },
-  ACTIVITY: {
-    label: 'Activity',
-    icon: Sun,
-    color: 'text-teal-400',
-    bg: 'bg-teal-900/30',
-    border: 'border-teal-700/50',
-    dot: 'bg-teal-400',
-    addLabel: 'Add Activity',
-    previewField: 'activityName'
-  }
-};
 
 const DEFAULT_DAY_SLOTS = [
   { type: 'HOTEL', sortOrder: 0 },
-  { type: 'BREAKFAST', sortOrder: 1 },
-  { type: 'ACTIVITY', sortOrder: 2 },
-  { type: 'LUNCH', sortOrder: 5 },
-  { type: 'ACTIVITY', sortOrder: 6 },
-  { type: 'DINNER', sortOrder: 9 }
 ];
 
 function parseLocalDate(dateStr) {
@@ -81,118 +28,8 @@ function formatDate(dateStr) {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-function loadPlanSelection(slotId) {
-  try {
-    const raw = localStorage.getItem(`travel-planner-plan-selection-${slotId}`);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function SlotCard({ slot, dayId, tripId, onDelete, index, isDragging, onDragStateChange }) {
-  const navigate = useNavigate();
-  const config = SLOT_CONFIG[slot.type] || SLOT_CONFIG.ACTIVITY;
-  const Icon = config.icon;
-  const isMealOrActivity = ['BREAKFAST', 'LUNCH', 'DINNER', 'ACTIVITY'].includes(slot.type);
-  const planSelection = isMealOrActivity ? loadPlanSelection(slot.id) : null;
-  const hasPlan = planSelection?.result != null;
-
-  const preview = hasPlan ? planSelection.result.name : slot.data?.[config.previewField];
-  const isEmpty = !preview;
-  const time = hasPlan ? planSelection.time : slot.data?.time;
-  const description = hasPlan ? (planSelection.result.shortDescription || '') : null;
-  const photos = hasPlan ? (planSelection.result.photos || []) : [];
-  const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slot.type);
-  const thumbnailUrl = photos.length > 0
-    ? (isMeal ? (photos[2]?.url || photos[0]?.url) : (photos[1]?.url || photos[0]?.url))
-    : null;
-
-  const handleClick = () => {
-    const phase = hasPlan ? 'plan' : '';
-    const url = `/trips/${tripId}/days/${dayId}/slots/${slot.id}${phase ? `?phase=${phase}` : ''}`;
-    navigate(url);
-  };
-
-  const handleDeleteClick = async (e) => {
-    e.stopPropagation();
-    onDelete(slot.id);
-  };
-
-  const handleDragStart = (e) => {
-    const payload = { slotId: slot.id, sourceDayId: dayId, sourceIndex: index };
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/json', JSON.stringify(payload));
-    onDragStateChange(payload);
-  };
-
-  return (
-    <div
-      draggable
-      onDragStart={handleDragStart}
-      onClick={handleClick}
-      className={`group relative rounded-xl border ${config.border} ${config.bg} p-3 cursor-pointer hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 ${isDragging ? 'opacity-40 scale-95' : ''}`}
-    >
-      <div className="flex items-center gap-2">
-        <div
-          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400 transition-colors"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <GripVertical size={14} />
-        </div>
-        {thumbnailUrl ? (
-          <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 shadow-sm">
-            <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-          </div>
-        ) : (
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-700 shadow-sm flex-shrink-0">
-            <Icon size={14} className={config.color} />
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className={`text-xs font-semibold ${config.color} uppercase tracking-wide`}>
-              {config.label}
-            </p>
-            {time && (
-              <span className="flex items-center gap-0.5 text-xs text-slate-400">
-                <Clock size={10} />
-                {time}
-              </span>
-            )}
-          </div>
-          {!isEmpty ? (
-            <>
-              <p className="text-sm font-medium text-slate-200 truncate mt-0.5">
-                {preview}
-              </p>
-              {description && (
-                <p className="text-xs text-slate-400 truncate mt-0.5">
-                  {description}
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-slate-500 mt-0.5">
-              {config.addLabel}
-            </p>
-          )}
-        </div>
-        <ChevronRight size={14} className={`${config.color} opacity-50 flex-shrink-0`} />
-      </div>
-
-      <button
-        onClick={handleDeleteClick}
-        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full hidden group-hover:flex items-center justify-center shadow-md hover:bg-red-600 transition-colors z-10"
-      >
-        <X size={10} />
-      </button>
-    </div>
-  );
-}
-
-function DayColumn({ day, tripId, onAddSlot, onDeleteSlot, onDeleteDay, onReorderSlots, onMoveSlot, onResearchDrop, dragState, onDragStateChange }) {
-  const [showAddSlot, setShowAddSlot] = useState(false);
+function DayColumn({ day, tripId, onDeleteSlot, onDeleteDay, onReorderSlots, onMoveSlot, onResearchDrop, dragState, onDragStateChange }) {
   const [dropIndex, setDropIndex] = useState(null);
-  const slotTypes = ['BREAKFAST', 'LUNCH', 'DINNER', 'ACTIVITY', 'HOTEL'];
 
   const isDragSource = dragState?.sourceDayId === day.id;
 
@@ -323,48 +160,18 @@ function DayColumn({ day, tripId, onAddSlot, onDeleteSlot, onDeleteDay, onReorde
           </div>
         )}
 
-        {day.slots?.length > 0 && dropIndex === day.slots.length && (
-          <div className="h-1 bg-ocean-400 rounded-full mx-2 animate-pulse" />
+        {day.slots?.length > 0 && (
+          <div
+            className="h-4"
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDropIndex(day.slots.length); }}
+            onDrop={(e) => handleDrop(e, day.slots.length)}
+          >
+            {dropIndex === day.slots.length && (
+              <div className="h-1 bg-ocean-400 rounded-full mx-2 mt-1 animate-pulse" />
+            )}
+          </div>
         )}
 
-        {/* Add Slot */}
-        {showAddSlot ? (
-          <div className="bg-slate-700/50 rounded-xl border border-slate-600 p-2">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 px-1">
-              Add Slot Type
-            </p>
-            <div className="space-y-1">
-              {slotTypes.map(type => {
-                const config = SLOT_CONFIG[type];
-                const Icon = config.icon;
-                return (
-                  <button
-                    key={type}
-                    onClick={() => { onAddSlot(day.id, type); setShowAddSlot(false); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-600 transition-colors text-left"
-                  >
-                    <Icon size={14} className={config.color} />
-                    <span className="text-sm font-medium text-slate-200">{config.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              onClick={() => setShowAddSlot(false)}
-              className="w-full mt-2 text-xs text-slate-500 hover:text-slate-300 py-1"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowAddSlot(true)}
-            className="w-full border-2 border-dashed border-slate-600 rounded-xl py-3 flex items-center justify-center gap-2 text-slate-500 hover:text-ocean-400 hover:border-ocean-500 transition-all duration-200 text-sm font-medium"
-          >
-            <Plus size={16} />
-            Add Slot
-          </button>
-        )}
       </div>
     </div>
   );
@@ -404,6 +211,8 @@ export default function TripPage() {
   const [dragState, setDragState] = useState(null);
   const [showResearch, setShowResearch] = useState(false);
   const [savedIdeas, setSavedIdeas] = useState([]);
+  const [selectedIdea, setSelectedIdea] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     loadTripData();
@@ -449,19 +258,6 @@ export default function TripPage() {
       console.error('Failed to add day:', err);
     } finally {
       setAddingDay(false);
-    }
-  };
-
-  const handleAddSlot = async (dayId, type) => {
-    try {
-      const newSlot = await slotsApi.create(dayId, { type, data: {} });
-      setDays(prev => prev.map(day =>
-        day.id === dayId
-          ? { ...day, slots: [...(day.slots || []), newSlot].sort((a, b) => a.sortOrder - b.sortOrder) }
-          : day
-      ));
-    } catch (err) {
-      console.error('Failed to add slot:', err);
     }
   };
 
@@ -537,11 +333,17 @@ export default function TripPage() {
         sortOrder: position,
         data: slotData,
       });
+      const targetDay = days.find(d => d.id === dayId);
+      const currentSlots = [...(targetDay?.slots || [])];
+      currentSlots.splice(position, 0, newSlot);
       setDays(prev => prev.map(day =>
-        day.id === dayId
-          ? { ...day, slots: [...(day.slots || []), newSlot].sort((a, b) => a.sortOrder - b.sortOrder) }
-          : day
+        day.id === dayId ? { ...day, slots: currentSlots } : day
       ));
+      await slotsApi.reorder(dayId, currentSlots.map(s => s.id));
+      if (payload.ideaId) {
+        await researchApi.deleteIdea(payload.ideaId);
+        setSavedIdeas(prev => prev.filter(i => i.id !== payload.ideaId));
+      }
     } catch (err) {
       console.error('Failed to create slot from idea:', err);
     }
@@ -669,11 +471,11 @@ export default function TripPage() {
                 Add Day
               </button>
               <button
-                onClick={handleDeleteTrip}
-                className="p-2 rounded-full hover:bg-red-900/30 text-slate-500 hover:text-red-400 transition-colors"
-                title="Delete trip"
+                onClick={() => setShowSettings(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 hover:text-slate-100 transition-colors text-sm font-medium"
               >
-                <Trash2 size={18} />
+                <Settings size={14} />
+                Settings
               </button>
             </div>
           </div>
@@ -705,7 +507,6 @@ export default function TripPage() {
                 key={day.id}
                 day={day}
                 tripId={tripId}
-                onAddSlot={handleAddSlot}
                 onDeleteSlot={handleDeleteSlot}
                 onDeleteDay={handleDeleteDay}
                 onReorderSlots={handleReorderSlots}
@@ -740,7 +541,17 @@ export default function TripPage() {
         ideas={savedIdeas}
         onOpenResearch={() => setShowResearch(true)}
         onDeleteIdea={handleDeleteIdea}
+        onClickIdea={setSelectedIdea}
       />
+
+      {selectedIdea && trip && (
+        <SuggestionDetailModal
+          suggestion={selectedIdea}
+          onClose={() => setSelectedIdea(null)}
+          tripId={tripId}
+          destination={trip.destination}
+        />
+      )}
 
       {deleteConfirm && (
         <DeleteConfirmModal
@@ -758,6 +569,16 @@ export default function TripPage() {
           onClose={() => setShowResearch(false)}
           savedIdeas={savedIdeas}
           onIdeasChange={setSavedIdeas}
+          mealPreferences={trip.mealPreferences}
+          activityPreferences={trip.activityPreferences}
+        />
+      )}
+
+      {showSettings && trip && (
+        <TripSettings
+          trip={trip}
+          onClose={() => setShowSettings(false)}
+          onTripUpdated={(updated) => setTrip(prev => ({ ...prev, ...updated }))}
         />
       )}
     </div>

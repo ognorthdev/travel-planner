@@ -31,11 +31,6 @@ router.get('/', async (req, res, next) => {
 
 const DEFAULT_DAY_SLOTS = [
   { type: 'HOTEL', sortOrder: 0 },
-  { type: 'BREAKFAST', sortOrder: 1 },
-  { type: 'ACTIVITY', sortOrder: 2 },
-  { type: 'LUNCH', sortOrder: 5 },
-  { type: 'ACTIVITY', sortOrder: 6 },
-  { type: 'DINNER', sortOrder: 9 },
 ];
 
 // POST /api/trips - Create a new trip
@@ -145,7 +140,7 @@ router.get('/:id', async (req, res, next) => {
 // PUT /api/trips/:id - Update a trip
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, destination, startDate, endDate, coverImageUrl } = req.body;
+    const { name, destination, startDate, endDate, coverImageUrl, mealPreferences, activityPreferences } = req.body;
 
     const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
     if (!trip) {
@@ -159,7 +154,9 @@ router.put('/:id', async (req, res, next) => {
         ...(destination && { destination }),
         ...(startDate && { startDate: new Date(startDate) }),
         ...(endDate && { endDate: new Date(endDate) }),
-        ...(coverImageUrl !== undefined && { coverImageUrl })
+        ...(coverImageUrl !== undefined && { coverImageUrl }),
+        ...(mealPreferences !== undefined && { mealPreferences }),
+        ...(activityPreferences !== undefined && { activityPreferences }),
       }
     });
 

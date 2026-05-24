@@ -4,7 +4,7 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import { researchApi, streamResearch } from '../../api/index.js';
 
-export default function ResearchChat({ tripId, destination, onSuggestion }) {
+export default function ResearchChat({ tripId, destination, onSuggestion, mealPreferences, activityPreferences }) {
   const [messages, setMessages] = useState([]);
   const [mode, setMode] = useState('flash');
   const [streaming, setStreaming] = useState(false);
@@ -56,6 +56,8 @@ export default function ResearchChat({ tripId, destination, onSuggestion }) {
         mode,
         messages: chatHistory,
         destination,
+        mealPreferences,
+        activityPreferences,
         signal: controller.signal,
       });
 
@@ -138,8 +140,8 @@ export default function ResearchChat({ tripId, destination, onSuggestion }) {
             <div className="text-4xl mb-3">🧭</div>
             <h3 className="text-lg font-semibold text-slate-200 mb-2">Research your trip</h3>
             <p className="text-sm text-slate-400 max-w-md">
-              Ask about restaurants, activities, and hidden gems in {destination}.
-              Use <span className="text-violet-400">Web Research</span> for live web search,{' '}
+              Discover new activity and meal ideas for {destination}.
+              Use <span className="text-violet-400">Web Research</span> to discover new ideas,{' '}
               <span className="text-emerald-400">Maps Research</span> for places and routes,{' '}
               or <span className="text-ocean-400">Questions</span> for quick answers.
             </p>

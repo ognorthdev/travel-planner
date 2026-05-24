@@ -4,8 +4,12 @@ import { DollarSign } from 'lucide-react';
 import { costsApi } from '../api/index.js';
 
 const SERVICE_LABELS = {
-  'claude': 'Claude AI',
-  'gemini': 'Gemini AI',
+  'claude-opus': 'Claude Opus',
+  'claude-sonnet': 'Claude Sonnet',
+  'claude': 'Claude Sonnet',
+  'gemini-flash': 'Gemini Flash',
+  'gemini': 'Gemini Flash',
+  'gemini-ai': 'Gemini Flash',
   'google-places': 'Google Places',
 };
 
@@ -106,8 +110,9 @@ export default function CostBadge({ tripId }) {
                 <div key={item.service} className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      item.service === 'claude' ? 'bg-violet-400' :
-                      item.service === 'gemini' ? 'bg-blue-400' :
+                      item.service === 'claude-opus' ? 'bg-violet-400' :
+                      ['claude-sonnet', 'claude'].includes(item.service) ? 'bg-purple-400' :
+                      ['gemini-flash', 'gemini', 'gemini-ai'].includes(item.service) ? 'bg-blue-400' :
                       'bg-emerald-400'
                     }`} />
                     <span className="text-sm text-slate-300 truncate">

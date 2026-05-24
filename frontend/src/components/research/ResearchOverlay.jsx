@@ -1,11 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import { X, MapPin } from 'lucide-react';
+import { ArrowLeft, MapPin } from 'lucide-react';
 import ResearchChat from './ResearchChat';
 import SuggestionPanel from './SuggestionPanel';
 import SuggestionDetailModal from './SuggestionDetailModal';
 import { researchApi } from '../../api/index.js';
 
-export default function ResearchOverlay({ tripId, destination, onClose, savedIdeas, onIdeasChange }) {
+export default function ResearchOverlay({ tripId, destination, onClose, savedIdeas, onIdeasChange, mealPreferences, activityPreferences }) {
   const [suggestions, setSuggestions] = useState([]);
   const [savedNames, setSavedNames] = useState(
     () => new Set(savedIdeas.map(i => i.name))
@@ -68,7 +68,13 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
   return (
     <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 bg-slate-800">
+      <div className="flex items-center gap-4 px-4 py-3 border-b border-slate-700 bg-slate-800">
+        <button
+          onClick={handleClose}
+          className="p-2 rounded-full hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+        >
+          <ArrowLeft size={20} />
+        </button>
         <div className="flex items-center gap-3">
           <span className="text-lg">🧭</span>
           <div>
@@ -79,12 +85,6 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
             </div>
           </div>
         </div>
-        <button
-          onClick={handleClose}
-          className="p-2 rounded-full hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
-        >
-          <X size={20} />
-        </button>
       </div>
 
       {/* Main content */}
@@ -95,6 +95,8 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
             tripId={tripId}
             destination={destination}
             onSuggestion={handleSuggestion}
+            mealPreferences={mealPreferences}
+            activityPreferences={activityPreferences}
           />
         </div>
 

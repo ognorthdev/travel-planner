@@ -4,9 +4,7 @@ const prisma = new PrismaClient();
 const PRICING = {
   'claude-opus-4-7': { inputPerMTok: 1500, outputPerMTok: 7500 },
   'claude-sonnet-4-6': { inputPerMTok: 300, outputPerMTok: 1500 },
-  'gemini-3-flash-preview': { inputPerMTok: 15, outputPerMTok: 60 },
-  'gemini-2.5-flash': { inputPerMTok: 15, outputPerMTok: 60 },
-  'deep-research-preview-04-2026': { perRequest: 50 },
+  'gemini-3.5-flash': { inputPerMTok: 150, outputPerMTok: 900 },
 };
 
 const PLACES_PRICING = {

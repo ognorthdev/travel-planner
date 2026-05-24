@@ -1,10 +1,38 @@
 const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
+const { recordCost, calculatePlacesCost } = require('../costs');
 
 const prisma = new PrismaClient();
 
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+
+let genAI = null;
+try {
+  const { GoogleGenerativeAI } = require('@google/generative-ai');
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here') {
+    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  }
+} catch (e) {
+  console.warn('Google Generative AI SDK not available for slot enrichment');
+}
+
 const VALID_SLOT_TYPES = ['BREAKFAST', 'LUNCH', 'DINNER', 'ACTIVITY', 'HOTEL'];
+
+async function resolvePhotoUrls(photoRefs) {
+  const results = await Promise.all(
+    photoRefs.map(async (p) => {
+      try {
+        const mediaUrl = `https://places.googleapis.com/v1/${p.name}/media?maxHeightPx=400&maxWidthPx=600&key=${GOOGLE_MAPS_API_KEY}&skipHttpRedirect=true`;
+        const resp = await fetch(mediaUrl);
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        return data.photoUri ? { url: data.photoUri } : null;
+      } catch { return null; }
+    })
+  );
+  return results.filter(Boolean);
+}
 
 // GET /api/days/:dayId/slots - Get all slots for a day
 router.get('/days/:dayId/slots', async (req, res, next) => {
@@ -234,6 +262,167 @@ router.delete('/slots/:id', async (req, res, next) => {
 
     await prisma.slot.delete({ where: { id: req.params.id } });
     res.json({ message: 'Slot deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/slots/:id/enrich — Fetch rich detail data for a slot
+router.post('/slots/:id/enrich', async (req, res, next) => {
+  try {
+    const slot = await prisma.slot.findUnique({
+      where: { id: req.params.id },
+      include: { day: { include: { slots: true, trip: true } } }
+    });
+    if (!slot) return res.status(404).json({ error: 'Slot not found' });
+
+    const slotData = typeof slot.data === 'string' ? JSON.parse(slot.data) : slot.data;
+
+    if (slotData.enrichment && !req.body.force) {
+      return res.json(slotData.enrichment);
+    }
+
+    const tripId = slot.day.trip.id;
+    const destination = slot.day.trip.destination;
+    const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slot.type);
+    const name = slotData.activityName || slotData.restaurantName || slotData.name || '';
+    const existingAddress = slotData.address || slotData.location || '';
+
+    if (!name) {
+      return res.json({ empty: true });
+    }
+
+    // Find hotel address from the same day for travel time context
+    const hotelSlot = slot.day.slots.find(s => s.type === 'HOTEL' && s.id !== slot.id);
+    const hotelData = hotelSlot ? (typeof hotelSlot.data === 'string' ? JSON.parse(hotelSlot.data) : hotelSlot.data) : {};
+    const hotelAddress = hotelData.address || '';
+
+    // 1. Google Places: photos, rating, reviewCount, address, googleMapsUrl, operatingHours
+    let placesResult = { photos: [], rating: null, reviewCount: null, address: existingAddress, googleMapsUrl: null, operatingHours: null, city: null };
+    if (GOOGLE_MAPS_API_KEY && GOOGLE_MAPS_API_KEY !== 'your_google_maps_api_key_here') {
+      try {
+        const query = `${name} ${existingAddress || destination}`.trim();
+        const searchRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+            'X-Goog-FieldMask': 'places.id,places.photos,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.currentOpeningHours,places.addressComponents',
+          },
+          body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
+        });
+
+        const ops = [{ type: 'text-search', count: 1 }];
+
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          const place = searchData.places?.[0];
+          if (place) {
+            const photoRefs = (place.photos || []).slice(0, 4);
+            if (photoRefs.length > 0) {
+              ops.push({ type: 'photo-media', count: photoRefs.length });
+              placesResult.photos = await resolvePhotoUrls(photoRefs);
+            }
+            placesResult.rating = place.rating || null;
+            placesResult.reviewCount = place.userRatingCount || null;
+            placesResult.address = place.formattedAddress || existingAddress;
+            placesResult.googleMapsUrl = place.googleMapsUri || null;
+            const components = place.addressComponents || [];
+            const locality = components.find(c => c.types?.includes('locality'));
+            const adminArea = components.find(c => c.types?.includes('administrative_area_level_1'));
+            placesResult.city = locality?.longText || adminArea?.longText || null;
+            const hours = place.currentOpeningHours?.weekdayDescriptions;
+            if (hours && hours.length > 0) {
+              placesResult.operatingHours = hours.join('; ');
+            }
+          }
+        }
+        recordCost({ tripId, service: 'google-places', operation: 'slot-enrich', costCents: calculatePlacesCost(ops) });
+      } catch (e) {
+        console.error('Places enrichment failed:', e.message);
+      }
+    }
+
+    // 2. AI enrichment: cost/tickets, travel times, review highlights, tips
+    let aiResult = { costInfo: null, travelFromHotel: null, reviewHighlights: [], tips: [] };
+    if (genAI) {
+      try {
+        const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+        const typeLabel = isMeal ? `restaurant (${slot.type.toLowerCase()})` : 'activity/attraction';
+        const hotelContext = hotelAddress ? `The traveler's hotel is at: ${hotelAddress}.` : '';
+
+        const prompt = `You are a travel research assistant. Provide detailed information about this ${typeLabel} in ${destination}.
+
+Name: ${name}
+Address: ${placesResult.address || 'unknown'}
+${hotelContext}
+
+Return a JSON object with these fields:
+{
+  "costInfo": {
+    "description": "Brief cost overview (e.g. 'Free admission' or 'Mid-range restaurant')",
+    "tickets": [
+      { "type": "ticket/menu type", "price": "price with currency" }
+    ]
+  },
+  ${hotelAddress ? `"travelFromHotel": {
+    "carMinutes": estimated_car_drive_minutes_as_number,
+    "transitMinutes": estimated_public_transit_minutes_as_number,
+    "walkMinutes": estimated_walking_minutes_as_number_or_null_if_too_far
+  },` : ''}
+  "reviewHighlights": [
+    "2-3 specific highlights or must-do things at this place based on common visitor feedback"
+  ],
+  "tips": [
+    "2-3 practical tips or things to watch out for"
+  ]
+}
+
+${isMeal ? 'For the costInfo tickets, list typical price ranges for different meal types (e.g. lunch set, dinner course, drinks). For reviewHighlights, focus on must-try dishes and atmosphere.' : 'For the costInfo tickets, list admission/ticket types and their prices. For reviewHighlights, focus on must-see exhibits, best experiences, and unique features.'}
+
+Return ONLY valid JSON, no markdown or explanation.`;
+
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
+        const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+
+        aiResult.costInfo = parsed.costInfo || null;
+        aiResult.travelFromHotel = parsed.travelFromHotel || null;
+        aiResult.reviewHighlights = parsed.reviewHighlights || [];
+        aiResult.tips = parsed.tips || [];
+
+        const usage = result.response.usageMetadata;
+        if (usage) {
+          recordCost({
+            tripId,
+            service: 'gemini-flash',
+            operation: 'slot-enrich',
+            model: 'gemini-3.5-flash',
+            inputTokens: usage.promptTokenCount || 0,
+            outputTokens: usage.candidatesTokenCount || 0,
+          });
+        }
+      } catch (e) {
+        console.error('AI enrichment failed:', e.message);
+      }
+    }
+
+    const enrichment = {
+      ...placesResult,
+      ...aiResult,
+      name,
+      fetchedAt: new Date().toISOString(),
+    };
+
+    // Cache enrichment in slot data
+    slotData.enrichment = enrichment;
+    await prisma.slot.update({
+      where: { id: slot.id },
+      data: { data: JSON.stringify(slotData) }
+    });
+
+    res.json(enrichment);
   } catch (err) {
     next(err);
   }

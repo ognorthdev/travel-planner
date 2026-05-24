@@ -36,209 +36,23 @@ async function askClaude(prompt, maxTokens = 1024) {
     inputTokens: message.usage?.input_tokens || 0,
     outputTokens: message.usage?.output_tokens || 0,
     model: 'claude-sonnet-4-6',
-    service: 'claude',
+    service: 'claude-sonnet',
   };
 }
 
 async function askGemini(prompt) {
   if (!genAI) throw new Error('Gemini API key not configured');
-  const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
   const result = await model.generateContent(prompt);
   const usage = result.response.usageMetadata;
   return {
     text: result.response.text(),
     inputTokens: usage?.promptTokenCount || 0,
     outputTokens: usage?.candidatesTokenCount || 0,
-    model: 'gemini-3-flash-preview',
-    service: 'gemini',
+    model: 'gemini-3.5-flash',
+    service: 'gemini-flash',
   };
 }
-
-// POST /api/ai/suggest-meal
-router.post('/suggest-meal', async (req, res, next) => {
-  try {
-    const { destination, mealType, cuisinePreferences, budget, notes, tripId } = req.body;
-
-    if (!destination || !mealType) {
-      return res.status(400).json({ error: 'destination and mealType are required' });
-    }
-
-    const prompt = `You are a travel food expert. Suggest a ${mealType.toLowerCase()} restaurant for a traveler visiting ${destination}.
-${cuisinePreferences ? `Cuisine preferences: ${cuisinePreferences}` : ''}
-${budget ? `Budget: ${budget}` : ''}
-${notes ? `Additional notes: ${notes}` : ''}
-
-Respond with a JSON object (no markdown, pure JSON) with these fields:
-{
-  "restaurantName": "name of restaurant",
-  "cuisine": "type of cuisine",
-  "address": "approximate address or area",
-  "priceRange": "$ | $$ | $$$ | $$$$",
-  "description": "brief description of why this is a great choice",
-  "mustTry": "signature dish or item to try",
-  "tips": "practical tip for visiting"
-}`;
-
-    let suggestion;
-    let source = 'placeholder';
-
-    try {
-      const result = await askClaude(prompt);
-      suggestion = JSON.parse(result.text);
-      source = 'claude';
-      recordCost({ tripId, service: result.service, operation: 'suggest-meal', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
-    } catch (e) {
-      try {
-        const result = await askGemini(prompt);
-        const cleaned = result.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        suggestion = JSON.parse(cleaned);
-        source = 'gemini';
-        recordCost({ tripId, service: result.service, operation: 'suggest-meal', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
-      } catch (e2) {
-        suggestion = {
-          restaurantName: `A Great ${mealType} Spot in ${destination}`,
-          cuisine: cuisinePreferences || 'Local',
-          address: `Central ${destination}`,
-          priceRange: budget || '$$',
-          description: `A highly recommended ${mealType.toLowerCase()} restaurant in ${destination} known for its authentic flavors and warm atmosphere.`,
-          mustTry: 'Chef\'s special of the day',
-          tips: 'Make a reservation in advance, especially on weekends.'
-        };
-        source = 'placeholder';
-      }
-    }
-
-    res.json({ suggestion, source });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST /api/ai/suggest-activity
-router.post('/suggest-activity', async (req, res, next) => {
-  try {
-    const { destination, category, duration, notes, tripId } = req.body;
-
-    if (!destination) {
-      return res.status(400).json({ error: 'destination is required' });
-    }
-
-    const prompt = `You are a travel expert. Suggest an activity for a traveler visiting ${destination}.
-${category ? `Category preference: ${category}` : ''}
-${duration ? `Available time: ${duration}` : ''}
-${notes ? `Additional notes: ${notes}` : ''}
-
-Respond with a JSON object (no markdown, pure JSON) with these fields:
-{
-  "activityName": "name of activity",
-  "category": "type of activity (Cultural, Adventure, Nature, Food, Shopping, etc.)",
-  "location": "specific location or area",
-  "duration": "recommended time needed",
-  "description": "why this activity is a must-do",
-  "highlights": "top 2-3 highlights in a single string",
-  "tips": "practical tip for this activity",
-  "bestTime": "best time of day to visit"
-}`;
-
-    let suggestion;
-    let source = 'placeholder';
-
-    try {
-      const result = await askClaude(prompt);
-      suggestion = JSON.parse(result.text);
-      source = 'claude';
-      recordCost({ tripId, service: result.service, operation: 'suggest-activity', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
-    } catch (e) {
-      try {
-        const result = await askGemini(prompt);
-        const cleaned = result.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        suggestion = JSON.parse(cleaned);
-        source = 'gemini';
-        recordCost({ tripId, service: result.service, operation: 'suggest-activity', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
-      } catch (e2) {
-        suggestion = {
-          activityName: `Explore ${destination}`,
-          category: category || 'Cultural',
-          location: `Downtown ${destination}`,
-          duration: duration || '2-3 hours',
-          description: `An iconic experience that captures the essence of ${destination}. A must-do for any visitor.`,
-          highlights: 'Stunning views, local culture, unique experiences',
-          tips: 'Go early to avoid crowds and get the best experience.',
-          bestTime: 'Morning or late afternoon'
-        };
-        source = 'placeholder';
-      }
-    }
-
-    res.json({ suggestion, source });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST /api/ai/search-hotel
-router.post('/search-hotel', async (req, res, next) => {
-  try {
-    const { destination, checkIn, checkOut, budget, preferences, notes, tripId } = req.body;
-
-    if (!destination) {
-      return res.status(400).json({ error: 'destination is required' });
-    }
-
-    const prompt = `You are a travel accommodation expert. Suggest a hotel for a traveler visiting ${destination}.
-${checkIn ? `Check-in: ${checkIn}` : ''}
-${checkOut ? `Check-out: ${checkOut}` : ''}
-${budget ? `Budget per night: ${budget}` : ''}
-${preferences ? `Preferences: ${preferences}` : ''}
-${notes ? `Additional notes: ${notes}` : ''}
-
-Respond with a JSON object (no markdown, pure JSON) with these fields:
-{
-  "hotelName": "name of hotel",
-  "address": "hotel address or area",
-  "starRating": 4,
-  "priceRange": "approximate price per night in USD",
-  "description": "why this hotel is a great choice",
-  "amenities": "top 3-4 amenities as a comma-separated string",
-  "neighborhood": "description of the neighborhood",
-  "tips": "practical tip for staying here"
-}`;
-
-    let suggestion;
-    let source = 'placeholder';
-
-    try {
-      const result = await askClaude(prompt);
-      suggestion = JSON.parse(result.text);
-      source = 'claude';
-      recordCost({ tripId, service: result.service, operation: 'search-hotel', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
-    } catch (e) {
-      try {
-        const result = await askGemini(prompt);
-        const cleaned = result.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        suggestion = JSON.parse(cleaned);
-        source = 'gemini';
-        recordCost({ tripId, service: result.service, operation: 'search-hotel', model: result.model, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
-      } catch (e2) {
-        suggestion = {
-          hotelName: `Premier Hotel ${destination}`,
-          address: `Central ${destination}`,
-          starRating: 4,
-          priceRange: budget || '$150-250/night',
-          description: `A highly-rated hotel in the heart of ${destination}, offering excellent comfort and convenient access to major attractions.`,
-          amenities: 'Free WiFi, Breakfast included, Fitness center, Concierge service',
-          neighborhood: `Located in the vibrant city center of ${destination}, walking distance to major attractions.`,
-          tips: 'Book directly with the hotel for best rates and flexible cancellation.'
-        };
-        source = 'placeholder';
-      }
-    }
-
-    res.json({ suggestion, source });
-  } catch (err) {
-    next(err);
-  }
-});
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 

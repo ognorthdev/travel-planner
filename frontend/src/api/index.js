@@ -49,14 +49,12 @@ export const slotsApi = {
   update: (id, data) => api.put(`/slots/${id}`, data),
   delete: (id) => api.delete(`/slots/${id}`),
   reorder: (dayId, slotIds) => api.put(`/days/${dayId}/slots/reorder`, { slotIds }),
-  move: (slotId, targetDayId, position) => api.put(`/slots/${slotId}/move`, { targetDayId, position })
+  move: (slotId, targetDayId, position) => api.put(`/slots/${slotId}/move`, { targetDayId, position }),
+  enrich: (slotId, force) => api.post(`/slots/${slotId}/enrich`, { force: !!force }).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
 };
 
 // AI
 export const aiApi = {
-  suggestMeal: (data) => api.post('/ai/suggest-meal', data).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
-  suggestActivity: (data) => api.post('/ai/suggest-activity', data).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
-  searchHotel: (data) => api.post('/ai/search-hotel', data).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
   discover: (data) => api.post('/ai/discover', data, { timeout: 120000 }).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
 };
 

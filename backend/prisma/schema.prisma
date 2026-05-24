@@ -8,18 +8,20 @@ datasource db {
 }
 
 model Trip {
-  id            String   @id @default(cuid())
-  name          String
-  destination   String
-  startDate     DateTime
-  endDate       DateTime
-  coverImageUrl String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  days          Day[]
-  ideas         Idea[]
-  chatSummary   ChatSummary?
-  apiCosts      ApiCost[]
+  id                   String   @id @default(cuid())
+  name                 String
+  destination          String
+  startDate            DateTime
+  endDate              DateTime
+  coverImageUrl        String?
+  mealPreferences      String?
+  activityPreferences  String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  days                 Day[]
+  ideas                Idea[]
+  chatSummary          ChatSummary?
+  apiCosts             ApiCost[]
 }
 
 model ApiCost {

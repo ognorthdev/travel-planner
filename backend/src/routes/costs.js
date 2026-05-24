@@ -4,9 +4,15 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
+const SERVICE_NORMALIZE = {
+  'gemini': 'gemini-flash',
+  'gemini-ai': 'gemini-flash',
+};
+
 const SERVICE_LABELS = {
-  'claude': 'Claude AI',
-  'gemini': 'Gemini AI',
+  'claude-opus': 'Claude Opus',
+  'claude-sonnet': 'Claude Sonnet',
+  'gemini-flash': 'Gemini Flash',
   'google-places': 'Google Places',
 };
 
@@ -22,11 +28,15 @@ router.get('/:tripId/costs', async (req, res, next) => {
 
     for (const cost of costs) {
       totalCents += cost.costCents;
-      if (!byService[cost.service]) {
-        byService[cost.service] = { service: cost.service, label: SERVICE_LABELS[cost.service] || cost.service, costCents: 0, callCount: 0 };
+      let service = SERVICE_NORMALIZE[cost.service] || cost.service;
+      if (service === 'claude') {
+        service = cost.model?.includes('opus') ? 'claude-opus' : 'claude-sonnet';
       }
-      byService[cost.service].costCents += cost.costCents;
-      byService[cost.service].callCount += 1;
+      if (!byService[service]) {
+        byService[service] = { service, label: SERVICE_LABELS[service] || service, costCents: 0, callCount: 0 };
+      }
+      byService[service].costCents += cost.costCents;
+      byService[service].callCount += 1;
     }
 
     const breakdown = Object.values(byService).sort((a, b) => b.costCents - a.costCents);

@@ -88,16 +88,28 @@ async function extractSuggestions(text, destination, tripId) {
     try {
       const message = await anthropic.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
+        max_tokens: 20000,
         messages: [{ role: 'user', content: buildExtractionPrompt(text.slice(0, 30000), destination) }],
       });
-      recordCost({ tripId, service: 'claude', operation: 'research-extract', model: 'claude-sonnet-4-6', inputTokens: message.usage?.input_tokens || 0, outputTokens: message.usage?.output_tokens || 0 });
+      recordCost({ tripId, service: 'claude-sonnet', operation: 'research-extract', model: 'claude-sonnet-4-6', inputTokens: message.usage?.input_tokens || 0, outputTokens: message.usage?.output_tokens || 0 });
       const responseText = message.content[0].text;
       const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       const firstBrace = cleaned.indexOf('{');
       const lastBrace = cleaned.lastIndexOf('}');
       if (firstBrace === -1 || lastBrace === -1) return [];
-      const parsed = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+      let jsonStr = cleaned.slice(firstBrace, lastBrace + 1);
+      jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch {
+        // If JSON is truncated, try to salvage by closing open arrays/objects
+        const openBrackets = (jsonStr.match(/\[/g) || []).length - (jsonStr.match(/\]/g) || []).length;
+        const openBraces = (jsonStr.match(/\{/g) || []).length - (jsonStr.match(/\}/g) || []).length;
+        jsonStr = jsonStr + ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
+        jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
+        parsed = JSON.parse(jsonStr);
+      }
       return parsed.suggestions || [];
     } catch (e) {
       console.error('Suggestion extraction failed (attempt ' + (attempt + 1) + '):', e.message);
@@ -240,7 +252,7 @@ router.put('/:tripId/summary', async (req, res, next) => {
 
 // POST /api/research/:tripId/stream — SSE streaming endpoint
 router.post('/:tripId/stream', async (req, res) => {
-  const { query, mode, messages, destination } = req.body;
+  const { query, mode, messages, destination, mealPreferences, activityPreferences } = req.body;
   if (!query || !destination) {
     return res.status(400).json({ error: 'query and destination are required' });
   }
@@ -258,7 +270,7 @@ router.post('/:tripId/stream', async (req, res) => {
   const tripId = req.params.tripId;
   try {
     if (mode === 'web') {
-      await handleWebResearch(res, query, messages, destination, () => closed, tripId);
+      await handleWebResearch(res, query, messages, destination, () => closed, tripId, { mealPreferences, activityPreferences });
     } else if (mode === 'maps') {
       await handleMapsResearch(res, query, messages, destination, () => closed, tripId);
     } else {
@@ -278,7 +290,7 @@ router.post('/:tripId/stream', async (req, res) => {
 });
 
 // Mode 1: Web Research — Claude Opus 4.7 with web search
-async function handleWebResearch(res, query, messages, destination, isClosed, tripId) {
+async function handleWebResearch(res, query, messages, destination, isClosed, tripId, preferences = {}) {
   if (!anthropic) {
     sendSSE(res, 'error', { message: 'Anthropic API not configured. Check your ANTHROPIC_API_KEY.' });
     return;
@@ -288,6 +300,17 @@ async function handleWebResearch(res, query, messages, destination, isClosed, tr
 
   const contextPrefix = messages && messages.length > 0
     ? `Context from our conversation so far:\n${messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n')}\n\n`
+    : '';
+
+  const preferencesSection = [];
+  if (preferences.mealPreferences) {
+    preferencesSection.push(`Meal preferences: ${preferences.mealPreferences}`);
+  }
+  if (preferences.activityPreferences) {
+    preferencesSection.push(`Activity preferences: ${preferences.activityPreferences}`);
+  }
+  const preferencesText = preferencesSection.length > 0
+    ? `\n\nUser preferences (apply these when making recommendations):\n${preferencesSection.join('\n')}`
     : '';
 
   const userPrompt = `${contextPrefix}Research the following about ${destination}: ${query}
@@ -306,12 +329,14 @@ Requirements:
   * Estimated duration of visit (for activities)
 - Prioritize breadth: cover different neighborhoods, price points, and styles
 - Include both well-known spots and hidden gems
-- Use web search to find current, accurate information`;
+- Use web search to find current, accurate information${preferencesText}`;
 
   try {
     const stream = anthropic.messages.stream({
-      model: 'claude-opus-4-7',
-      max_tokens: 16000,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 20000,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'high' },
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 10 }],
       messages: [{ role: 'user', content: userPrompt }],
     });
@@ -329,7 +354,7 @@ Requirements:
 
     const inputTokens = finalMessage.usage?.input_tokens || 0;
     const outputTokens = finalMessage.usage?.output_tokens || 0;
-    recordCost({ tripId, service: 'claude', operation: 'web-research', model: 'claude-opus-4-7', inputTokens, outputTokens });
+    recordCost({ tripId, service: 'claude-sonnet', operation: 'web-research', model: 'claude-sonnet-4-6', inputTokens, outputTokens });
 
     // Extract full text from all text content blocks (stream.on('text') may miss text after tool results)
     const fullText = finalMessage.content
@@ -375,7 +400,7 @@ async function handleMapsResearch(res, query, messages, destination, isClosed, t
 
   sendSSE(res, 'status', { phase: 'researching' });
 
-  const model = flashGenAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = flashGenAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
   const chatHistory = (messages || []).map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
@@ -408,7 +433,7 @@ async function handleMapsResearch(res, query, messages, destination, isClosed, t
 
       const estimatedInputTokens = Math.ceil(query.length / 4);
       const estimatedOutputTokens = Math.ceil(accumulatedText.length / 4);
-      recordCost({ tripId, service: 'gemini', operation: 'maps-research', model: 'gemini-2.5-flash', inputTokens: estimatedInputTokens, outputTokens: estimatedOutputTokens });
+      recordCost({ tripId, service: 'gemini-flash', operation: 'maps-research', model: 'gemini-3.5-flash', inputTokens: estimatedInputTokens, outputTokens: estimatedOutputTokens });
 
       if (accumulatedText.length > 100) {
         sendSSE(res, 'status', { phase: 'extracting' });
@@ -476,7 +501,7 @@ async function handleQuestions(res, query, messages, destination, isClosed, trip
 
     const inputTokens = finalMessage.usage?.input_tokens || 0;
     const outputTokens = finalMessage.usage?.output_tokens || 0;
-    recordCost({ tripId, service: 'claude', operation: 'questions-chat', model: 'claude-sonnet-4-6', inputTokens, outputTokens });
+    recordCost({ tripId, service: 'claude-sonnet', operation: 'questions-chat', model: 'claude-sonnet-4-6', inputTokens, outputTokens });
 
     if (accumulatedText.length > 100) {
       sendSSE(res, 'status', { phase: 'extracting' });
