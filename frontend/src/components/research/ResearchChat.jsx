@@ -124,6 +124,16 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
     abortRef.current = null;
   }, [streaming, messages, mode, tripId, destination, onSuggestion]);
 
+  const handleReextract = useCallback(async (message) => {
+    if (!message?.content?.trim()) return;
+    try {
+      const result = await researchApi.extract(tripId, message.content, destination);
+      (result?.suggestions || []).forEach(s => onSuggestion?.(s));
+    } catch (err) {
+      console.error('Re-extract failed:', err);
+    }
+  }, [tripId, destination, onSuggestion]);
+
   const getMessages = useCallback(() => messages, [messages]);
 
   useEffect(() => {
@@ -148,7 +158,7 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
           </div>
         )}
         {messages.map(msg => (
-          <ChatMessage key={msg.id} message={msg} />
+          <ChatMessage key={msg.id} message={msg} onReextract={handleReextract} />
         ))}
         {streaming && status === 'researching' && (
           <div className="flex items-center gap-2 px-4 py-2 text-xs text-violet-400">

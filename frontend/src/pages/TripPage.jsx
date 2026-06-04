@@ -428,7 +428,7 @@ export default function TripPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col">
+    <div className="h-screen bg-slate-900 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-slate-800 border-b border-slate-700 shadow-sm sticky top-0 z-10">
         <div className="max-w-full px-4 sm:px-6">
@@ -544,14 +544,23 @@ export default function TripPage() {
         onClickIdea={setSelectedIdea}
       />
 
-      {selectedIdea && trip && (
-        <SuggestionDetailModal
-          suggestion={selectedIdea}
-          onClose={() => setSelectedIdea(null)}
-          tripId={tripId}
-          destination={trip.destination}
-        />
-      )}
+      {selectedIdea && trip && (() => {
+        const idx = savedIdeas.findIndex(i => i.id === selectedIdea.id);
+        return (
+          <SuggestionDetailModal
+            suggestion={selectedIdea}
+            onClose={() => setSelectedIdea(null)}
+            tripId={tripId}
+            destination={trip.destination}
+            currentIndex={idx}
+            total={savedIdeas.length}
+            hasPrev={idx > 0}
+            hasNext={idx >= 0 && idx < savedIdeas.length - 1}
+            onPrev={() => { if (idx > 0) setSelectedIdea(savedIdeas[idx - 1]); }}
+            onNext={() => { if (idx >= 0 && idx < savedIdeas.length - 1) setSelectedIdea(savedIdeas[idx + 1]); }}
+          />
+        );
+      })()}
 
       {deleteConfirm && (
         <DeleteConfirmModal

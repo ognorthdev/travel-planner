@@ -17,6 +17,10 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
     setSuggestions(prev => [...prev, { ...suggestion, id }]);
   }, []);
 
+  const handleRemoveSuggestion = useCallback((suggestion) => {
+    setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
+  }, []);
+
   const handleToggleSave = useCallback(async (suggestion) => {
     const isCurrentlySaved = savedNames.has(suggestion.name);
 
@@ -106,6 +110,7 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
             suggestions={suggestions}
             savedIds={savedNames}
             onToggleSave={handleToggleSave}
+            onRemove={handleRemoveSuggestion}
             onBubbleClick={setDetailSuggestion}
             tripId={tripId}
             destination={destination}

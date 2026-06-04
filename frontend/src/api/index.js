@@ -76,6 +76,7 @@ export const researchApi = {
   reorderIdeas: (tripId, ids) => api.put(`/research/${tripId}/ideas/reorder`, { ideaIds: ids }),
   getSummary: (tripId) => api.get(`/research/${tripId}/summary`),
   saveSummary: (tripId, summary) => api.put(`/research/${tripId}/summary`, { summary }),
+  extract: (tripId, text, destination) => api.post(`/research/${tripId}/extract`, { text, destination }, { timeout: 120000 }).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
 };
 
 export const costsApi = {

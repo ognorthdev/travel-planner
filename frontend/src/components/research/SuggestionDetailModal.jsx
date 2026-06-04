@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, MapPin, Clock, Coffee, Utensils, Moon, Sun, Star, UtensilsCrossed, Lightbulb, ThumbsDown, Footprints, Bus, Car, ExternalLink } from 'lucide-react';
+import { X, MapPin, Clock, Coffee, Utensils, Moon, Sun, Star, UtensilsCrossed, Lightbulb, ThumbsDown, Footprints, Bus, Car, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
 import { placesApi } from '../../api/index.js';
 
 const TYPE_CONFIG = {
@@ -43,7 +43,7 @@ function buildTikTokSearchUrl(name, destination) {
   return `https://www.tiktok.com/search?q=${encodeURIComponent(query)}`;
 }
 
-export default function SuggestionDetailModal({ suggestion, onClose, tripId, destination }) {
+export default function SuggestionDetailModal({ suggestion, onClose, tripId, destination, onPrev, onNext, hasPrev, hasNext, currentIndex, total }) {
   const config = TYPE_CONFIG[suggestion.type] || TYPE_CONFIG.ACTIVITY;
   const Icon = config.icon;
   const data = suggestion.data || {};
@@ -51,10 +51,21 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
   const [enriched, setEnriched] = useState(null);
 
   useEffect(() => {
+    setEnriched(null);
     placesApi.enrich(suggestion.name, data.address || '', tripId)
       .then(result => setEnriched(result))
       .catch(() => {});
   }, [suggestion.name, data.address]);
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'ArrowRight' && hasNext && onNext) { e.preventDefault(); onNext(); }
+      else if (e.key === 'ArrowLeft' && hasPrev && onPrev) { e.preventDefault(); onPrev(); }
+      else if (e.key === 'Escape') { onClose(); }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [hasNext, hasPrev, onNext, onPrev, onClose]);
 
   const photos = enriched?.photos || [];
   const rating = enriched?.rating || data.rating;
@@ -67,8 +78,20 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
   const watchOutFor = data.watchOutFor || [];
   const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(suggestion.type);
 
+  const showNav = !!(onPrev || onNext);
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60" onClick={onClose}>
+      {showNav && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onPrev?.(); }}
+          disabled={!hasPrev}
+          title="Previous idea (←)"
+          className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-slate-800/90 border border-slate-600 text-slate-300 flex items-center justify-center shadow-xl transition-colors hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <ChevronLeft size={20} />
+        </button>
+      )}
       <div
         className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto mx-4 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -90,12 +113,17 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
               <span className="text-xs text-emerald-400 font-semibold">{data.priceRange}</span>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {showNav && total > 0 && (
+              <span className="text-xs text-slate-500 tabular-nums">{currentIndex + 1} / {total}</span>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="p-5 space-y-4">
@@ -251,6 +279,16 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
           )}
         </div>
       </div>
+      {showNav && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onNext?.(); }}
+          disabled={!hasNext}
+          title="Next idea (→)"
+          className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-slate-800/90 border border-slate-600 text-slate-300 flex items-center justify-center shadow-xl transition-colors hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <ChevronRight size={20} />
+        </button>
+      )}
     </div>
   );
 }

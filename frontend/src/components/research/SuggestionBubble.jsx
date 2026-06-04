@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Coffee, Utensils, Moon, Sun, MapPin, Star, Footprints, Bus, Car, UtensilsCrossed, Lightbulb, ThumbsDown, Clock, ExternalLink } from 'lucide-react';
+import { Heart, Coffee, Utensils, Moon, Sun, MapPin, Star, Footprints, Bus, Car, UtensilsCrossed, Lightbulb, ThumbsDown, Clock, ExternalLink, Trash2 } from 'lucide-react';
 import { placesApi } from '../../api/index.js';
 
 const TYPE_CONFIG = {
@@ -43,7 +43,7 @@ function buildTikTokSearchUrl(name, destination) {
   return `https://www.tiktok.com/search?q=${encodeURIComponent(query)}`;
 }
 
-export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, onClick, style, tripId, destination }) {
+export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, onRemove, onClick, style, tripId, destination }) {
   const config = TYPE_CONFIG[suggestion.type] || TYPE_CONFIG.ACTIVITY;
   const Icon = config.icon;
   const data = suggestion.data || {};
@@ -249,17 +249,27 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
           )}
         </div>
 
-        {/* Heart button */}
-        <button
-          onClick={(e) => { e.stopPropagation(); onToggleSave?.(suggestion); }}
-          className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 ${
-            isSaved
-              ? 'bg-rose-500/20 border border-rose-500/50 text-rose-400'
-              : 'bg-slate-700 border border-slate-600 text-slate-400 hover:text-rose-400 hover:border-rose-500/50'
-          }`}
-        >
-          <Heart size={16} className={isSaved ? 'fill-rose-400' : ''} />
-        </button>
+        {/* Action buttons */}
+        <div className="flex-shrink-0 flex flex-col gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleSave?.(suggestion); }}
+            title={isSaved ? 'Saved to trip' : 'Save to trip'}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 ${
+              isSaved
+                ? 'bg-rose-500/20 border border-rose-500/50 text-rose-400'
+                : 'bg-slate-700 border border-slate-600 text-slate-400 hover:text-rose-400 hover:border-rose-500/50'
+            }`}
+          >
+            <Heart size={16} className={isSaved ? 'fill-rose-400' : ''} />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove?.(suggestion); }}
+            title="Remove idea"
+            className="w-9 h-9 rounded-xl flex items-center justify-center bg-slate-700 border border-slate-600 text-slate-400 hover:text-red-400 hover:border-red-500/50 transition-all duration-200"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
       </div>
     </div>
   );

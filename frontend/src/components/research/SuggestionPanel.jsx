@@ -2,7 +2,7 @@ import React from 'react';
 import { Lightbulb } from 'lucide-react';
 import SuggestionBubble from './SuggestionBubble';
 
-export default function SuggestionPanel({ suggestions, savedIds, onToggleSave, onBubbleClick, tripId, destination }) {
+export default function SuggestionPanel({ suggestions, savedIds, onToggleSave, onRemove, onBubbleClick, tripId, destination }) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-700">
@@ -27,6 +27,7 @@ export default function SuggestionPanel({ suggestions, savedIds, onToggleSave, o
               suggestion={suggestion}
               isSaved={savedIds.has(suggestion.name)}
               onToggleSave={onToggleSave}
+              onRemove={onRemove}
               onClick={onBubbleClick}
               style={{ animationDelay: `${Math.min(i * 100, 500)}ms` }}
               tripId={tripId}

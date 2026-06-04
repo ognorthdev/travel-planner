@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { Compass, ChevronUp, ChevronDown, Lightbulb } from 'lucide-react';
+import { Compass, Maximize2, Minimize2, Lightbulb } from 'lucide-react';
 import IdeaBubble from './IdeaBubble';
 
+// Approx height of one compact idea card + the vertical gap between rows.
+const ROW_HEIGHT = 80;
+
 export default function ResearchBottomPanel({ ideas, onOpenResearch, onDeleteIdea, onClickIdea }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const rows = expanded ? 4 : 1;
+  const maxHeight = rows * ROW_HEIGHT;
 
   return (
-    <div className="bg-slate-800 border-t border-slate-700 flex-shrink-0 transition-all duration-300">
-      {/* Toggle bar */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2 hover:bg-slate-750 transition-colors"
-      >
+    <div className="bg-slate-800 border-t border-slate-700 flex-shrink-0">
+      {/* Header bar */}
+      <div className="w-full flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-2">
           <Lightbulb size={14} className="text-amber-400" />
           <span className="text-xs font-medium text-slate-300">Trip Ideas</span>
@@ -21,42 +23,53 @@ export default function ResearchBottomPanel({ ideas, onOpenResearch, onDeleteIde
             </span>
           )}
         </div>
-        {expanded ? <ChevronDown size={14} className="text-slate-500" /> : <ChevronUp size={14} className="text-slate-500" />}
-      </button>
-
-      {/* Expanded content */}
-      {expanded && (
-        <div className="flex items-stretch gap-4 px-4 pb-3 min-h-[80px]">
-          {/* Research button */}
+        {ideas.length > 0 && (
           <button
-            onClick={onOpenResearch}
-            className="flex-shrink-0 flex flex-col items-center justify-center gap-2 w-32 rounded-xl border-2 border-dashed border-slate-600 hover:border-ocean-500 text-slate-400 hover:text-ocean-400 transition-all hover:bg-slate-800/80"
+            onClick={() => setExpanded(!expanded)}
+            title={expanded ? 'Shrink ideas to one row' : 'Expand ideas to show more'}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-ocean-400 hover:bg-slate-700 transition-colors"
           >
-            <Compass size={20} />
-            <span className="text-xs font-medium">Research my trip</span>
+            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            {expanded ? 'Shrink' : 'Expand'}
           </button>
+        )}
+      </div>
 
-          {/* Saved ideas scroll area */}
-          <div className="flex-1 overflow-x-auto min-w-0">
-            {ideas.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-xs text-slate-600">
-                Save ideas from research to drag them into your days
-              </div>
-            ) : (
-              <div className="flex gap-2 h-full items-start py-0.5">
-                {ideas.map(idea => (
-                  <IdeaBubble
-                    key={idea.id}
-                    idea={idea}
-                    onDelete={onDeleteIdea}
-                    onClickIdea={onClickIdea}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+      {/* Content */}
+      <div className="flex items-start gap-4 px-4 pb-3">
+        {/* Research button — fixed at one row height, pinned to the top */}
+        <button
+          onClick={onOpenResearch}
+          style={{ height: ROW_HEIGHT - 8 }}
+          className="flex-shrink-0 flex flex-col items-center justify-center gap-2 w-32 rounded-xl border-2 border-dashed border-slate-600 hover:border-ocean-500 text-slate-400 hover:text-ocean-400 transition-all hover:bg-slate-800/80"
+        >
+          <Compass size={20} />
+          <span className="text-xs font-medium">Research my trip</span>
+        </button>
+
+        {/* Saved ideas — wrap into rows and grow downward (vertical scroll, never horizontal) */}
+        <div
+          className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 transition-[max-height] duration-300"
+          style={{ maxHeight }}
+        >
+          {ideas.length === 0 ? (
+            <div className="flex items-center text-xs text-slate-600" style={{ height: ROW_HEIGHT - 8 }}>
+              Save ideas from research to drag them into your days
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2 content-start pr-1">
+              {ideas.map(idea => (
+                <IdeaBubble
+                  key={idea.id}
+                  idea={idea}
+                  onDelete={onDeleteIdea}
+                  onClickIdea={onClickIdea}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

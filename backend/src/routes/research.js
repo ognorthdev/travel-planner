@@ -83,16 +83,18 @@ ${text}
 }
 
 async function extractSuggestions(text, destination, tripId) {
-  if (!anthropic) return [];
+  if (!flashGenAI) return [];
+  const model = flashGenAI.getGenerativeModel({
+    model: 'gemini-3.5-flash',
+    generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 20000 },
+  });
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const message = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 20000,
-        messages: [{ role: 'user', content: buildExtractionPrompt(text.slice(0, 30000), destination) }],
-      });
-      recordCost({ tripId, service: 'claude-sonnet', operation: 'research-extract', model: 'claude-sonnet-4-6', inputTokens: message.usage?.input_tokens || 0, outputTokens: message.usage?.output_tokens || 0 });
-      const responseText = message.content[0].text;
+      const result = await model.generateContent(buildExtractionPrompt(text.slice(0, 30000), destination));
+      const response = result.response;
+      const usage = response.usageMetadata || {};
+      recordCost({ tripId, service: 'gemini-flash', operation: 'research-extract', model: 'gemini-3.5-flash', inputTokens: usage.promptTokenCount || 0, outputTokens: usage.candidatesTokenCount || 0 });
+      const responseText = response.text();
       const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       const firstBrace = cleaned.indexOf('{');
       const lastBrace = cleaned.lastIndexOf('}');
@@ -250,6 +252,20 @@ router.put('/:tripId/summary', async (req, res, next) => {
   }
 });
 
+// POST /api/research/:tripId/extract — re-extract idea cards from a single message's text
+router.post('/:tripId/extract', async (req, res, next) => {
+  try {
+    const { text, destination } = req.body;
+    if (!text || !destination) {
+      return res.status(400).json({ error: 'text and destination are required' });
+    }
+    const suggestions = await extractSuggestions(text, destination, req.params.tripId);
+    res.json({ suggestions });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/research/:tripId/stream — SSE streaming endpoint
 router.post('/:tripId/stream', async (req, res) => {
   const { query, mode, messages, destination, mealPreferences, activityPreferences } = req.body;
@@ -371,7 +387,7 @@ Requirements:
       }
     }
 
-    if (textForExtraction.length > 100) {
+    if (textForExtraction.trim().length > 0) {
       sendSSE(res, 'status', { phase: 'extracting' });
       const suggestions = await extractSuggestions(textForExtraction, destination, tripId);
       for (const suggestion of suggestions) {
@@ -435,7 +451,7 @@ async function handleMapsResearch(res, query, messages, destination, isClosed, t
       const estimatedOutputTokens = Math.ceil(accumulatedText.length / 4);
       recordCost({ tripId, service: 'gemini-flash', operation: 'maps-research', model: 'gemini-3.5-flash', inputTokens: estimatedInputTokens, outputTokens: estimatedOutputTokens });
 
-      if (accumulatedText.length > 100) {
+      if (accumulatedText.trim().length > 0) {
         sendSSE(res, 'status', { phase: 'extracting' });
         const suggestions = await extractSuggestions(accumulatedText, destination, tripId);
         for (const suggestion of suggestions) {
@@ -503,7 +519,7 @@ async function handleQuestions(res, query, messages, destination, isClosed, trip
     const outputTokens = finalMessage.usage?.output_tokens || 0;
     recordCost({ tripId, service: 'claude-sonnet', operation: 'questions-chat', model: 'claude-sonnet-4-6', inputTokens, outputTokens });
 
-    if (accumulatedText.length > 100) {
+    if (accumulatedText.trim().length > 0) {
       sendSSE(res, 'status', { phase: 'extracting' });
       const suggestions = await extractSuggestions(accumulatedText, destination, tripId);
       for (const suggestion of suggestions) {
