@@ -6,7 +6,7 @@ import { researchApi, streamResearch } from '../../api/index.js';
 
 export default function ResearchChat({ tripId, destination, onSuggestion, mealPreferences, activityPreferences }) {
   const [messages, setMessages] = useState([]);
-  const [mode, setMode] = useState('flash');
+  const [mode, setMode] = useState('web');
   const [streaming, setStreaming] = useState(false);
   const [status, setStatus] = useState(null);
   const [elapsed, setElapsed] = useState(0);

@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Plus, Calendar, MapPin, Loader2,
-  Trash2, X, AlertTriangle, GripVertical, Settings
+  ArrowLeft, Plus, Loader2,
+  Trash2, X, AlertTriangle, GripVertical
 } from 'lucide-react';
 import { tripsApi, daysApi, slotsApi, researchApi } from '../api/index.js';
 import ResearchBottomPanel from '../components/research/ResearchBottomPanel';
 import ResearchOverlay from '../components/research/ResearchOverlay';
 import SuggestionDetailModal from '../components/research/SuggestionDetailModal';
 import TripSettings from '../components/TripSettings.jsx';
-import CostBadge from '../components/CostBadge';
+import TripHeader from '../components/TripHeader.jsx';
 import SlotCard from '../components/SlotCard.jsx';
 import SLOT_CONFIG from '../config/slotTypes.js';
 
@@ -349,6 +349,31 @@ export default function TripPage() {
     }
   };
 
+  // Drag a placed meal/activity slot back into the ideas collection: save it as an idea
+  // (keeping its enrichment) and remove it from the day.
+  const handleSlotToIdea = async (payload) => {
+    const ideaTypes = ['ACTIVITY', 'BREAKFAST', 'LUNCH', 'DINNER'];
+    if (!ideaTypes.includes(payload.type) || !payload.name) return;
+    const data = typeof payload.data === 'string' ? JSON.parse(payload.data) : (payload.data || {});
+    try {
+      const saved = await researchApi.saveIdea(tripId, {
+        type: payload.type,
+        name: payload.name,
+        description: payload.description || data.description || '',
+        data,
+      });
+      setSavedIdeas(prev => [...prev, saved]);
+      await slotsApi.delete(payload.slotId);
+      setDays(prev => prev.map(d =>
+        d.id === payload.sourceDayId
+          ? { ...d, slots: (d.slots || []).filter(s => s.id !== payload.slotId) }
+          : d
+      ));
+    } catch (err) {
+      console.error('Failed to move slot back to ideas:', err);
+    }
+  };
+
   const handleDeleteSlot = (slotId) => {
     setDeleteConfirm({
       type: 'slot',
@@ -430,57 +455,14 @@ export default function TripPage() {
   return (
     <div className="h-screen bg-slate-900 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700 shadow-sm sticky top-0 z-10">
-        <div className="max-w-full px-4 sm:px-6">
-          <div className="flex items-center gap-4 h-16">
-            <button
-              onClick={() => navigate('/')}
-              className="p-2 rounded-full hover:bg-slate-700 transition-colors text-slate-400"
-            >
-              <ArrowLeft size={20} />
-            </button>
-
-            <div className="flex-1 min-w-0">
-              <h1 className="font-bold text-lg text-slate-100 truncate">{trip?.name}</h1>
-              <div className="flex items-center gap-3 text-sm text-slate-400">
-                <span className="flex items-center gap-1">
-                  <MapPin size={12} className="text-teal-500" />
-                  {trip?.destination}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Calendar size={12} className="text-ocean-400" />
-                  {trip && parseLocalDate(trip.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  {' – '}
-                  {trip && parseLocalDate(trip.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <CostBadge tripId={tripId} />
-              <button
-                onClick={handleAddDay}
-                disabled={addingDay}
-                className="btn-primary"
-              >
-                {addingDay ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Plus size={16} />
-                )}
-                Add Day
-              </button>
-              <button
-                onClick={() => setShowSettings(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 hover:text-slate-100 transition-colors text-sm font-medium"
-              >
-                <Settings size={14} />
-                Settings
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <TripHeader
+        trip={trip}
+        tripId={tripId}
+        onBack={() => navigate('/')}
+        onAddDay={handleAddDay}
+        addingDay={addingDay}
+        onOpenSettings={() => setShowSettings(true)}
+      />
 
       {/* Horizontal Day Scroll */}
       <div className="flex-1 overflow-hidden">
@@ -542,6 +524,8 @@ export default function TripPage() {
         onOpenResearch={() => setShowResearch(true)}
         onDeleteIdea={handleDeleteIdea}
         onClickIdea={setSelectedIdea}
+        onSlotDrop={handleSlotToIdea}
+        dragState={dragState}
       />
 
       {selectedIdea && trip && (() => {
@@ -574,9 +558,13 @@ export default function TripPage() {
 
       {showResearch && trip && (
         <ResearchOverlay
+          trip={trip}
           tripId={tripId}
           destination={trip.destination}
           onClose={() => setShowResearch(false)}
+          onAddDay={handleAddDay}
+          addingDay={addingDay}
+          onOpenSettings={() => setShowSettings(true)}
           savedIdeas={savedIdeas}
           onIdeasChange={setSavedIdeas}
           mealPreferences={trip.mealPreferences}

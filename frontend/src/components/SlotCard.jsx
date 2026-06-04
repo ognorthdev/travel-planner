@@ -37,7 +37,18 @@ export default function SlotCard({ slot, dayId, tripId, onDelete, index, isDragg
     if (onDragStart) {
       onDragStart(e);
     } else {
-      const payload = { slotId: slot.id, sourceDayId: dayId, sourceIndex: index };
+      // Include idea fields so this slot can be dropped back into the ideas collection,
+      // alongside the slotId/source fields used for day-to-day moves.
+      const payload = {
+        source: 'slot',
+        slotId: slot.id,
+        sourceDayId: dayId,
+        sourceIndex: index,
+        type: slot.type,
+        name: preview,
+        description: slot.data?.description || '',
+        data: slot.data || {},
+      };
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('application/json', JSON.stringify(payload));
       onDragStateChange?.(payload);
@@ -68,13 +79,13 @@ export default function SlotCard({ slot, dayId, tripId, onDelete, index, isDragg
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className={`text-xs font-semibold ${config.color} uppercase tracking-wide`}>
+          <div className="flex items-center gap-1.5">
+            <p className={`text-xs font-semibold ${config.color} uppercase tracking-wide whitespace-nowrap`}>
               {config.label}
             </p>
             {time && (
-              <span className="flex items-center gap-0.5 text-xs text-slate-400">
-                <Clock size={10} />
+              <span className="flex items-center gap-0.5 text-[10px] text-slate-400 whitespace-nowrap">
+                <Clock size={9} />
                 {formatTime12(time)}
               </span>
             )}

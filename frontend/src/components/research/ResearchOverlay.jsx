@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { ArrowLeft, MapPin } from 'lucide-react';
 import ResearchChat from './ResearchChat';
 import SuggestionPanel from './SuggestionPanel';
 import SuggestionDetailModal from './SuggestionDetailModal';
+import TripHeader from '../TripHeader.jsx';
 import { researchApi } from '../../api/index.js';
 
-export default function ResearchOverlay({ tripId, destination, onClose, savedIdeas, onIdeasChange, mealPreferences, activityPreferences }) {
+export default function ResearchOverlay({ trip, tripId, destination, onClose, onAddDay, addingDay, onOpenSettings, savedIdeas, onIdeasChange, mealPreferences, activityPreferences }) {
   const [suggestions, setSuggestions] = useState([]);
   const [savedNames, setSavedNames] = useState(
     () => new Set(savedIdeas.map(i => i.name))
@@ -80,25 +80,15 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-4 px-4 py-3 border-b border-slate-700 bg-slate-800">
-        <button
-          onClick={handleClose}
-          className="p-2 rounded-full hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <div className="flex items-center gap-3">
-          <span className="text-lg">🧭</span>
-          <div>
-            <h2 className="text-sm font-semibold text-slate-200">Research your trip</h2>
-            <div className="flex items-center gap-1 text-xs text-slate-400">
-              <MapPin size={10} className="text-teal-400" />
-              {destination}
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Shared header — back returns to the date view */}
+      <TripHeader
+        trip={trip}
+        tripId={tripId}
+        onBack={handleClose}
+        onAddDay={onAddDay}
+        addingDay={addingDay}
+        onOpenSettings={onOpenSettings}
+      />
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">

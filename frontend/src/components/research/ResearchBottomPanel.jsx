@@ -5,13 +5,40 @@ import IdeaBubble from './IdeaBubble';
 // Approx height of one compact idea card + the vertical gap between rows.
 const ROW_HEIGHT = 80;
 
-export default function ResearchBottomPanel({ ideas, onOpenResearch, onDeleteIdea, onClickIdea }) {
+export default function ResearchBottomPanel({ ideas, onOpenResearch, onDeleteIdea, onClickIdea, onSlotDrop, dragState }) {
   const [expanded, setExpanded] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const rows = expanded ? 4 : 1;
   const maxHeight = rows * ROW_HEIGHT;
 
+  // Highlight only while a placed slot (not an idea) is being dragged.
+  const slotDragging = dragState?.source === 'slot';
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (slotDragging && !dragOver) setDragOver(true);
+  };
+  const handleDragLeave = (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false);
+  };
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    let payload;
+    try { payload = JSON.parse(e.dataTransfer.getData('application/json')); } catch { return; }
+    if (payload?.source === 'slot') onSlotDrop?.(payload);
+  };
+
   return (
-    <div className="bg-slate-800 border-t border-slate-700 flex-shrink-0">
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`bg-slate-800 border-t flex-shrink-0 transition-colors ${
+        dragOver ? 'border-ocean-500 bg-ocean-900/10' : 'border-slate-700'
+      }`}
+    >
       {/* Header bar */}
       <div className="w-full flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-2">
@@ -21,6 +48,9 @@ export default function ResearchBottomPanel({ ideas, onOpenResearch, onDeleteIde
             <span className="text-[10px] bg-ocean-600/30 text-ocean-400 px-1.5 py-0.5 rounded-full font-medium">
               {ideas.length}
             </span>
+          )}
+          {slotDragging && (
+            <span className="text-[11px] font-medium text-ocean-400 ml-1">Drop here to move back to ideas</span>
           )}
         </div>
         {ideas.length > 0 && (
