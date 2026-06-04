@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -23,6 +23,12 @@ model Trip {
   ideas                Idea[]
   chatSummary          ChatSummary?
   apiCosts             ApiCost[]
+  // Owner = Supabase Auth user id (UUID from the JWT `sub` claim).
+  // Supabase manages the auth.users table; we just store + index the id and
+  // enforce per-user scoping in the backend on every query.
+  userId               String
+
+  @@index([userId])
 }
 
 model ApiCost {

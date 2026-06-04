@@ -8,6 +8,7 @@ const prisma = new PrismaClient();
 router.get('/', async (req, res, next) => {
   try {
     const trips = await prisma.trip.findMany({
+      where: { userId: req.user.id },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { days: true } },
@@ -53,6 +54,7 @@ router.post('/', async (req, res, next) => {
         startDate: start,
         endDate: end,
         coverImageUrl: coverImageUrl || null,
+        userId: req.user.id,
       },
     });
 
@@ -101,8 +103,8 @@ router.post('/', async (req, res, next) => {
 // GET /api/trips/:id - Get a single trip
 router.get('/:id', async (req, res, next) => {
   try {
-    const trip = await prisma.trip.findUnique({
-      where: { id: req.params.id },
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
       include: {
         days: {
           orderBy: { dayNumber: 'asc' },
@@ -142,7 +144,7 @@ router.put('/:id', async (req, res, next) => {
   try {
     const { name, destination, startDate, endDate, coverImageUrl, mealPreferences, activityPreferences, modelConfig } = req.body;
 
-    const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
+    const trip = await prisma.trip.findFirst({ where: { id: req.params.id, userId: req.user.id } });
     if (!trip) {
       return res.status(404).json({ error: 'Trip not found' });
     }
@@ -170,7 +172,7 @@ router.put('/:id', async (req, res, next) => {
 // DELETE /api/trips/:id - Delete a trip
 router.delete('/:id', async (req, res, next) => {
   try {
-    const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
+    const trip = await prisma.trip.findFirst({ where: { id: req.params.id, userId: req.user.id } });
     if (!trip) {
       return res.status(404).json({ error: 'Trip not found' });
     }
@@ -185,8 +187,8 @@ router.delete('/:id', async (req, res, next) => {
 // GET /api/trips/:id/locations - Get all filled hotel/activity locations for address dropdown
 router.get('/:id/locations', async (req, res, next) => {
   try {
-    const trip = await prisma.trip.findUnique({
-      where: { id: req.params.id },
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, userId: req.user.id },
       include: {
         days: {
           orderBy: { dayNumber: 'asc' },

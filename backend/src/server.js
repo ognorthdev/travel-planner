@@ -9,29 +9,37 @@ const aiRouter = require('./routes/ai');
 const placesRouter = require('./routes/places');
 const researchRouter = require('./routes/research');
 const costsRouter = require('./routes/costs');
+const { requireAuth } = require('./middleware/requireAuth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Allowed frontend origins (comma-separated). Falls back to local dev.
+const trustedOrigins = (process.env.TRUSTED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-  credentials: true
+  origin: trustedOrigins,
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
 
-// Health check
+// Health check (public)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routes
-app.use('/api/trips', tripsRouter);
-app.use('/api', daysRouter);
-app.use('/api', slotsRouter);
-app.use('/api/ai', aiRouter);
-app.use('/api/places', placesRouter);
-app.use('/api/research', researchRouter);
-app.use('/api/costs', costsRouter);
+// Routes — all data routes require a valid Supabase session
+app.use('/api/trips', requireAuth, tripsRouter);
+app.use('/api', requireAuth, daysRouter);
+app.use('/api', requireAuth, slotsRouter);
+app.use('/api/ai', requireAuth, aiRouter);
+app.use('/api/places', requireAuth, placesRouter);
+app.use('/api/research', requireAuth, researchRouter);
+app.use('/api/costs', requireAuth, costsRouter);
 
 // Global error handler
 app.use((err, req, res, next) => {

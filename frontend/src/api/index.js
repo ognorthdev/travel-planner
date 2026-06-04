@@ -1,16 +1,26 @@
 import axios from 'axios';
+import { supabase } from '../lib/supabase';
+
+// In dev this is '' (Vite proxies /api to the backend). In prod set
+// VITE_API_URL to the deployed backend origin (e.g. https://...onrender.com).
+export const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: `${API_BASE}/api`,
   headers: {
     'Content-Type': 'application/json'
   },
   timeout: 30000
 });
 
-// Request interceptor
+// Request interceptor — attach the current Supabase access token.
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => Promise.reject(error)
@@ -85,9 +95,14 @@ export const costsApi = {
 };
 
 export async function* streamResearch(tripId, body) {
-  const response = await fetch(`/api/research/${tripId}/stream`, {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const response = await fetch(`${API_BASE}/api/research/${tripId}/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(body),
     signal: body.signal,
   });
