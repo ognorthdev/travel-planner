@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, MapPin, Clock, Coffee, Utensils, Moon, Sun, Star, UtensilsCrossed, Lightbulb, ThumbsDown, Footprints, Bus, Car, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
-import { placesApi } from '../../api/index.js';
+import { X, MapPin, Clock, Phone, Coffee, Utensils, Moon, Sun, Star, UtensilsCrossed, Lightbulb, ThumbsDown, Footprints, Bus, Car, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
+import { placesApi, researchApi } from '../../api/index.js';
 
 const TYPE_CONFIG = {
   BREAKFAST: { label: 'Breakfast', icon: Coffee, color: 'text-amber-400', bg: 'bg-amber-900/30' },
@@ -43,7 +43,7 @@ function buildTikTokSearchUrl(name, destination) {
   return `https://www.tiktok.com/search?q=${encodeURIComponent(query)}`;
 }
 
-export default function SuggestionDetailModal({ suggestion, onClose, tripId, destination, onPrev, onNext, hasPrev, hasNext, currentIndex, total }) {
+export default function SuggestionDetailModal({ suggestion, onClose, tripId, destination, ideaId, onPrev, onNext, hasPrev, hasNext, currentIndex, total }) {
   const config = TYPE_CONFIG[suggestion.type] || TYPE_CONFIG.ACTIVITY;
   const Icon = config.icon;
   const data = suggestion.data || {};
@@ -51,11 +51,18 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
   const [enriched, setEnriched] = useState(null);
 
   useEffect(() => {
+    // 1) Already persisted on the card — no Places call. 2) Saved idea — fetch once and
+    // persist onto the idea. 3) Transient suggestion — fetch live.
+    if (data.enrichment) {
+      setEnriched(data.enrichment);
+      return;
+    }
     setEnriched(null);
-    placesApi.enrich(suggestion.name, data.address || '', tripId)
-      .then(result => setEnriched(result))
-      .catch(() => {});
-  }, [suggestion.name, data.address]);
+    const request = ideaId
+      ? researchApi.enrichIdea(ideaId)
+      : placesApi.enrich(suggestion.name, data.address || '', tripId);
+    request.then(result => setEnriched(result)).catch(() => {});
+  }, [suggestion.name, data.address, ideaId]);
 
   useEffect(() => {
     const handleKey = (e) => {
@@ -72,6 +79,9 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
   const reviewCount = enriched?.reviewCount || data.reviewCount;
   const googleMapsUrl = enriched?.googleMapsUrl;
   const address = enriched?.address || data.address || '';
+  const phoneNumber = enriched?.phoneNumber || null;
+  // Prefer authoritative Places hours (array of weekday strings) over the model's guess.
+  const placesHours = enriched?.openingHours || null;
 
   const mustTryDishes = data.mustTryDishes || [];
   const reviewSummary = data.reviewSummary || [];
@@ -138,10 +148,26 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
             </div>
           )}
 
-          {data.operatingHours && (
+          {placesHours ? (
+            <div className="flex items-start gap-2 text-sm text-slate-400">
+              <Clock size={14} className="text-slate-500 flex-shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                {placesHours.map((line, i) => (
+                  <div key={i} className="text-[13px] leading-snug">{line}</div>
+                ))}
+              </div>
+            </div>
+          ) : data.operatingHours ? (
             <div className="flex items-center gap-2 text-sm text-slate-400">
               <Clock size={14} className="text-slate-500 flex-shrink-0" />
               <span>{data.operatingHours}</span>
+            </div>
+          ) : null}
+
+          {phoneNumber && (
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <Phone size={14} className="text-slate-500 flex-shrink-0" />
+              <a href={`tel:${phoneNumber.replace(/\s+/g, '')}`} className="hover:text-slate-200 transition-colors">{phoneNumber}</a>
             </div>
           )}
 

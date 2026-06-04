@@ -150,10 +150,10 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
             <div className="text-4xl mb-3">🧭</div>
             <h3 className="text-lg font-semibold text-slate-200 mb-2">Research your trip</h3>
             <p className="text-sm text-slate-400 max-w-md">
-              Discover new activity and meal ideas for {destination}.
-              Use <span className="text-violet-400">Web Research</span> to discover new ideas,{' '}
-              <span className="text-emerald-400">Maps Research</span> for places and routes,{' '}
-              or <span className="text-ocean-400">Questions</span> for quick answers.
+              Plan your trip to {destination}.
+              Use <span className="text-violet-400">Web Research</span> to discover new activity/meal ideas,{' '}
+              <span className="text-emerald-400">Maps Research</span> to lookup places you know,{' '}
+              or <span className="text-ocean-400">Questions</span> to ask questions about your trip.
             </p>
           </div>
         )}

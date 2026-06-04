@@ -552,6 +552,7 @@ export default function TripPage() {
             onClose={() => setSelectedIdea(null)}
             tripId={tripId}
             destination={trip.destination}
+            ideaId={selectedIdea.id}
             currentIndex={idx}
             total={savedIdeas.length}
             hasPrev={idx > 0}

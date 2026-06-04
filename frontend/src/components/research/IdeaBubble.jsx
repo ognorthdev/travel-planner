@@ -3,13 +3,14 @@ import SlotCard from '../SlotCard.jsx';
 
 export default function IdeaBubble({ idea, onDelete, onClickIdea, isDragging }) {
   const parsedData = typeof idea.data === 'string' ? JSON.parse(idea.data || '{}') : (idea.data || {});
+  const storedPhotos = parsedData.enrichment?.photos || parsedData.photos || [];
 
   const slotLike = {
     type: idea.type,
     data: {
-      enrichment: { name: idea.name, photos: parsedData.photos || [] },
-      description: idea.description,
       ...parsedData,
+      enrichment: { name: idea.name, photos: storedPhotos },
+      description: idea.description,
     },
   };
 

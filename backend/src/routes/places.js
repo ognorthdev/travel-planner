@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { recordCost, calculatePlacesCost } = require('../costs');
+const { fetchEnrichment } = require('../enrichment');
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
@@ -196,54 +197,18 @@ router.get('/details/:placeId', async (req, res, next) => {
   }
 });
 
-// POST /api/places/enrich — look up a place by name+address, return photos + rating
+// POST /api/places/enrich — look up a place by name+address (used for transient research
+// suggestions that aren't saved cards yet). Saved cards persist their enrichment instead.
 router.post('/enrich', async (req, res, next) => {
   try {
-    if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === 'your_google_maps_api_key_here') {
-      return res.json({ photos: [], rating: null, reviewCount: null });
-    }
-
     const { name, address, tripId } = req.body;
     if (!name) return res.json({ photos: [], rating: null, reviewCount: null });
 
-    const query = `${name} ${address || ''}`.trim();
-    const searchRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-        'X-Goog-FieldMask': 'places.id,places.photos,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri',
-      },
-      body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
-    });
-
-    const ops = [{ type: 'text-search', count: 1 }];
-
-    if (!searchRes.ok) {
+    const { value, ops } = await fetchEnrichment(name, address);
+    if (ops.length > 0) {
       recordCost({ tripId, service: 'google-places', operation: 'enrich', costCents: calculatePlacesCost(ops) });
-      return res.json({ photos: [], rating: null, reviewCount: null });
     }
-
-    const searchData = await searchRes.json();
-    const place = searchData.places?.[0];
-    if (!place) {
-      recordCost({ tripId, service: 'google-places', operation: 'enrich', costCents: calculatePlacesCost(ops) });
-      return res.json({ photos: [], rating: null, reviewCount: null });
-    }
-
-    const photoRefs = (place.photos || []).slice(0, 4);
-    if (photoRefs.length > 0) ops.push({ type: 'photo-media', count: photoRefs.length });
-    const photos = photoRefs.length > 0 ? await resolvePhotoUrls(photoRefs) : [];
-
-    recordCost({ tripId, service: 'google-places', operation: 'enrich', costCents: calculatePlacesCost(ops) });
-
-    res.json({
-      photos,
-      rating: place.rating || null,
-      reviewCount: place.userRatingCount || null,
-      address: place.formattedAddress || null,
-      googleMapsUrl: place.googleMapsUri || null,
-    });
+    res.json(value);
   } catch (err) {
     next(err);
   }

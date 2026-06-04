@@ -43,7 +43,7 @@ function buildTikTokSearchUrl(name, destination) {
   return `https://www.tiktok.com/search?q=${encodeURIComponent(query)}`;
 }
 
-export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, onRemove, onClick, style, tripId, destination }) {
+export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, onRemove, onClick, onEnriched, style, tripId, destination }) {
   const config = TYPE_CONFIG[suggestion.type] || TYPE_CONFIG.ACTIVITY;
   const Icon = config.icon;
   const data = suggestion.data || {};
@@ -54,9 +54,17 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
 
   useEffect(() => {
     if (enriching || enriched) return;
+    // Reuse enrichment already persisted on the card instead of re-billing Places.
+    if (data.enrichment) {
+      setEnriched(data.enrichment);
+      return;
+    }
     setEnriching(true);
     placesApi.enrich(suggestion.name, address, tripId)
-      .then(result => setEnriched(result))
+      .then(result => {
+        setEnriched(result);
+        onEnriched?.(suggestion, result); // lift up so it can be saved onto the idea
+      })
       .catch(() => setEnriched(null))
       .finally(() => setEnriching(false));
   }, [suggestion.name, address]);

@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
-const { recordCost } = require('../costs');
+const { recordCost, calculatePlacesCost } = require('../costs');
+const { fetchEnrichment } = require('../enrichment');
 
 const prisma = new PrismaClient();
 
@@ -29,6 +30,29 @@ try {
 
 function sendSSE(res, event, data) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+// Per-trip model assignments. Only the listed models are valid for each behaviour;
+// Web Research is locked to Claude (needs web search) and enrichment to Google Places.
+const DEFAULT_MODEL_CONFIG = {
+  webResearch: 'claude-sonnet',
+  mapsResearch: 'gemini-flash',
+  questions: 'gemini-flash',
+  extraction: 'gemini-flash',
+  enrichment: 'google-places',
+};
+
+async function getModelConfig(tripId) {
+  try {
+    const trip = await prisma.trip.findUnique({ where: { id: tripId }, select: { modelConfig: true } });
+    if (trip?.modelConfig) {
+      const parsed = typeof trip.modelConfig === 'string' ? JSON.parse(trip.modelConfig) : trip.modelConfig;
+      return { ...DEFAULT_MODEL_CONFIG, ...parsed };
+    }
+  } catch (e) {
+    console.error('Failed to load model config:', e.message);
+  }
+  return { ...DEFAULT_MODEL_CONFIG };
 }
 
 function buildExtractionPrompt(text, destination) {
@@ -82,43 +106,138 @@ ${text}
 """`;
 }
 
-async function extractSuggestions(text, destination, tripId) {
-  if (!flashGenAI) return [];
-  const model = flashGenAI.getGenerativeModel({
-    model: 'gemini-3.5-flash',
-    generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 20000 },
-  });
+// Parse the model's JSON response into a suggestions array, salvaging truncated JSON.
+function parseSuggestions(responseText) {
+  const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace === -1 || lastBrace === -1) return [];
+  let jsonStr = cleaned.slice(firstBrace, lastBrace + 1).replace(/,\s*([\]}])/g, '$1');
+  try {
+    return JSON.parse(jsonStr).suggestions || [];
+  } catch {
+    // If JSON is truncated, try to salvage by closing open arrays/objects
+    const openBrackets = (jsonStr.match(/\[/g) || []).length - (jsonStr.match(/\]/g) || []).length;
+    const openBraces = (jsonStr.match(/\{/g) || []).length - (jsonStr.match(/\}/g) || []).length;
+    jsonStr = (jsonStr + ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces))).replace(/,\s*([\]}])/g, '$1');
+    return JSON.parse(jsonStr).suggestions || [];
+  }
+}
+
+async function extractSuggestions(text, destination, tripId, engine = 'gemini-flash') {
+  const prompt = buildExtractionPrompt(text.slice(0, 30000), destination);
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const result = await model.generateContent(buildExtractionPrompt(text.slice(0, 30000), destination));
-      const response = result.response;
-      const usage = response.usageMetadata || {};
-      recordCost({ tripId, service: 'gemini-flash', operation: 'research-extract', model: 'gemini-3.5-flash', inputTokens: usage.promptTokenCount || 0, outputTokens: usage.candidatesTokenCount || 0 });
-      const responseText = response.text();
-      const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      const firstBrace = cleaned.indexOf('{');
-      const lastBrace = cleaned.lastIndexOf('}');
-      if (firstBrace === -1 || lastBrace === -1) return [];
-      let jsonStr = cleaned.slice(firstBrace, lastBrace + 1);
-      jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
-      let parsed;
-      try {
-        parsed = JSON.parse(jsonStr);
-      } catch {
-        // If JSON is truncated, try to salvage by closing open arrays/objects
-        const openBrackets = (jsonStr.match(/\[/g) || []).length - (jsonStr.match(/\]/g) || []).length;
-        const openBraces = (jsonStr.match(/\{/g) || []).length - (jsonStr.match(/\}/g) || []).length;
-        jsonStr = jsonStr + ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
-        jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
-        parsed = JSON.parse(jsonStr);
+      let responseText;
+      if (engine === 'claude-sonnet') {
+        if (!anthropic) return [];
+        const message = await anthropic.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 20000,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        recordCost({ tripId, service: 'claude-sonnet', operation: 'research-extract', model: 'claude-sonnet-4-6', inputTokens: message.usage?.input_tokens || 0, outputTokens: message.usage?.output_tokens || 0 });
+        responseText = message.content[0].text;
+      } else {
+        if (!flashGenAI) return [];
+        const model = flashGenAI.getGenerativeModel({
+          model: 'gemini-3.5-flash',
+          generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 20000 },
+        });
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        const usage = response.usageMetadata || {};
+        recordCost({ tripId, service: 'gemini-flash', operation: 'research-extract', model: 'gemini-3.5-flash', inputTokens: usage.promptTokenCount || 0, outputTokens: usage.candidatesTokenCount || 0 });
+        responseText = response.text();
       }
-      return parsed.suggestions || [];
+      return parseSuggestions(responseText);
     } catch (e) {
       console.error('Suggestion extraction failed (attempt ' + (attempt + 1) + '):', e.message);
       if (attempt < 2) await sleep(3000 * (attempt + 1));
     }
   }
   return [];
+}
+
+// Stream a chat response from Claude Sonnet, returning the accumulated text.
+async function streamClaudeText(res, { systemPrompt, query, messages, isClosed, tripId, operation, maxTokens = 4096 }) {
+  const chatMessages = (messages || []).map(m => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: m.content,
+  }));
+  chatMessages.push({ role: 'user', content: query });
+
+  const stream = anthropic.messages.stream({
+    model: 'claude-sonnet-4-6',
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: chatMessages,
+  });
+
+  let accumulatedText = '';
+  stream.on('text', (text) => {
+    if (isClosed()) return;
+    accumulatedText += text;
+    sendSSE(res, 'text', { content: text });
+  });
+
+  const finalMessage = await stream.finalMessage();
+  if (isClosed()) return accumulatedText;
+
+  recordCost({ tripId, service: 'claude-sonnet', operation, model: 'claude-sonnet-4-6', inputTokens: finalMessage.usage?.input_tokens || 0, outputTokens: finalMessage.usage?.output_tokens || 0 });
+  return accumulatedText;
+}
+
+// Stream a chat response from Gemini Flash, returning the accumulated text. Retries on 503.
+async function streamGeminiText(res, { systemPrompt, query, messages, isClosed, tripId, operation }) {
+  const model = flashGenAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+  const chatHistory = (messages || []).map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+  const chat = model.startChat({
+    history: chatHistory,
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+  });
+
+  const maxRetries = 2;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await chat.sendMessageStream(query);
+      let accumulatedText = '';
+      for await (const chunk of result.stream) {
+        if (isClosed()) break;
+        const text = chunk.text();
+        if (text) {
+          accumulatedText += text;
+          sendSSE(res, 'text', { content: text });
+        }
+      }
+      if (isClosed()) return accumulatedText;
+      recordCost({ tripId, service: 'gemini-flash', operation, model: 'gemini-3.5-flash', inputTokens: Math.ceil(query.length / 4), outputTokens: Math.ceil(accumulatedText.length / 4) });
+      return accumulatedText;
+    } catch (err) {
+      const is503 = err.status === 503 || err.message?.includes('503');
+      if (is503 && attempt < maxRetries) {
+        sendSSE(res, 'status', { phase: 'retrying' });
+        await sleep(3000 * (attempt + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+// Run extraction on response text and stream the resulting cards to the client.
+async function streamExtraction(res, text, destination, isClosed, tripId, engine) {
+  if (!text || text.trim().length === 0) return;
+  sendSSE(res, 'status', { phase: 'extracting' });
+  const suggestions = await extractSuggestions(text, destination, tripId, engine);
+  for (const suggestion of suggestions) {
+    if (isClosed()) break;
+    sendSSE(res, 'suggestion', suggestion);
+    await sleep(200);
+  }
 }
 
 function sleep(ms) {
@@ -169,6 +288,34 @@ router.post('/:tripId/ideas', async (req, res, next) => {
       ...idea,
       data: typeof idea.data === 'string' ? JSON.parse(idea.data) : idea.data
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/research/ideas/:id/enrich — return the idea's stored enrichment, or fetch it
+// once from Places and persist it onto the idea (so it's never billed again until deleted).
+router.post('/ideas/:id/enrich', async (req, res, next) => {
+  try {
+    const idea = await prisma.idea.findUnique({ where: { id: req.params.id } });
+    if (!idea) {
+      return res.status(404).json({ error: 'Idea not found' });
+    }
+    const data = typeof idea.data === 'string' ? JSON.parse(idea.data || '{}') : (idea.data || {});
+
+    if (data.enrichment && !req.body.force) {
+      return res.json(data.enrichment); // already persisted on the card — no Places call
+    }
+
+    const { value, ops, found } = await fetchEnrichment(idea.name, data.address || '');
+    if (ops.length > 0) {
+      recordCost({ tripId: idea.tripId, service: 'google-places', operation: 'enrich', costCents: calculatePlacesCost(ops) });
+    }
+    if (found) {
+      data.enrichment = value;
+      await prisma.idea.update({ where: { id: idea.id }, data: { data: JSON.stringify(data) } });
+    }
+    res.json(value);
   } catch (err) {
     next(err);
   }
@@ -259,7 +406,8 @@ router.post('/:tripId/extract', async (req, res, next) => {
     if (!text || !destination) {
       return res.status(400).json({ error: 'text and destination are required' });
     }
-    const suggestions = await extractSuggestions(text, destination, req.params.tripId);
+    const config = await getModelConfig(req.params.tripId);
+    const suggestions = await extractSuggestions(text, destination, req.params.tripId, config.extraction);
     res.json({ suggestions });
   } catch (err) {
     next(err);
@@ -285,12 +433,13 @@ router.post('/:tripId/stream', async (req, res) => {
 
   const tripId = req.params.tripId;
   try {
+    const config = await getModelConfig(tripId);
     if (mode === 'web') {
-      await handleWebResearch(res, query, messages, destination, () => closed, tripId, { mealPreferences, activityPreferences });
+      await handleWebResearch(res, query, messages, destination, () => closed, tripId, { mealPreferences, activityPreferences }, config.extraction, config.webResearch);
     } else if (mode === 'maps') {
-      await handleMapsResearch(res, query, messages, destination, () => closed, tripId);
+      await handleMapsResearch(res, query, messages, destination, () => closed, tripId, config.mapsResearch, config.extraction);
     } else {
-      await handleQuestions(res, query, messages, destination, () => closed, tripId);
+      await handleQuestions(res, query, messages, destination, () => closed, tripId, config.questions, config.extraction);
     }
   } catch (err) {
     console.error('Stream error:', err);
@@ -305,10 +454,66 @@ router.post('/:tripId/stream', async (req, res) => {
   }
 });
 
-// Mode 1: Web Research — Claude Opus 4.7 with web search
-async function handleWebResearch(res, query, messages, destination, isClosed, tripId, preferences = {}) {
-  if (!anthropic) {
-    sendSSE(res, 'error', { message: 'Anthropic API not configured. Check your ANTHROPIC_API_KEY.' });
+// Web Research with Claude Sonnet + Anthropic web_search tool. Returns text for extraction.
+async function claudeWebResearch(res, userPrompt, isClosed, tripId) {
+  const stream = anthropic.messages.stream({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 20000,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: 'high' },
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 10 }],
+    messages: [{ role: 'user', content: userPrompt }],
+  });
+
+  let accumulatedText = '';
+  stream.on('text', (text) => {
+    if (isClosed()) return;
+    accumulatedText += text;
+    sendSSE(res, 'text', { content: text });
+  });
+
+  const finalMessage = await stream.finalMessage();
+  if (isClosed()) return accumulatedText;
+
+  recordCost({ tripId, service: 'claude-sonnet', operation: 'web-research', model: 'claude-sonnet-4-6', inputTokens: finalMessage.usage?.input_tokens || 0, outputTokens: finalMessage.usage?.output_tokens || 0 });
+
+  // Extract full text from all text content blocks (stream.on('text') may miss text after tool results)
+  const fullText = finalMessage.content.filter(b => b.type === 'text').map(b => b.text).join('\n\n');
+  if (fullText.length > accumulatedText.length && !isClosed()) {
+    const missed = fullText.slice(accumulatedText.length);
+    if (missed.trim()) sendSSE(res, 'text', { content: missed });
+  }
+  return fullText.length > accumulatedText.length ? fullText : accumulatedText;
+}
+
+// Web Research with Gemini Flash + Google Search grounding. Returns text for extraction.
+async function geminiWebResearch(res, userPrompt, isClosed, tripId) {
+  const model = flashGenAI.getGenerativeModel({
+    model: 'gemini-3.5-flash',
+    tools: [{ googleSearch: {} }],
+  });
+  const result = await model.generateContentStream(userPrompt);
+
+  let accumulatedText = '';
+  for await (const chunk of result.stream) {
+    if (isClosed()) break;
+    const text = chunk.text();
+    if (text) {
+      accumulatedText += text;
+      sendSSE(res, 'text', { content: text });
+    }
+  }
+  if (isClosed()) return accumulatedText;
+
+  const usage = (await result.response).usageMetadata || {};
+  recordCost({ tripId, service: 'gemini-flash', operation: 'web-research', model: 'gemini-3.5-flash', inputTokens: usage.promptTokenCount || 0, outputTokens: usage.candidatesTokenCount || 0 });
+  return accumulatedText;
+}
+
+// Mode 1: Web Research — text engine configurable (Claude Sonnet default, or Gemini Flash). Both have live web access.
+async function handleWebResearch(res, query, messages, destination, isClosed, tripId, preferences = {}, extractionEngine = 'gemini-flash', engine = 'claude-sonnet') {
+  if (engine === 'gemini-flash' ? !flashGenAI : !anthropic) {
+    sendSSE(res, 'error', { message: `${engine === 'gemini-flash' ? 'Gemini' : 'Anthropic'} API not configured.` });
     return;
   }
 
@@ -348,141 +553,55 @@ Requirements:
 - Use web search to find current, accurate information${preferencesText}`;
 
   try {
-    const stream = anthropic.messages.stream({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 20000,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'high' },
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 10 }],
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-
-    let accumulatedText = '';
-
-    stream.on('text', (text) => {
-      if (isClosed()) return;
-      accumulatedText += text;
-      sendSSE(res, 'text', { content: text });
-    });
-
-    const finalMessage = await stream.finalMessage();
+    const textForExtraction = engine === 'gemini-flash'
+      ? await geminiWebResearch(res, userPrompt, isClosed, tripId)
+      : await claudeWebResearch(res, userPrompt, isClosed, tripId);
     if (isClosed()) return;
 
-    const inputTokens = finalMessage.usage?.input_tokens || 0;
-    const outputTokens = finalMessage.usage?.output_tokens || 0;
-    recordCost({ tripId, service: 'claude-sonnet', operation: 'web-research', model: 'claude-sonnet-4-6', inputTokens, outputTokens });
-
-    // Extract full text from all text content blocks (stream.on('text') may miss text after tool results)
-    const fullText = finalMessage.content
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('\n\n');
-    const textForExtraction = fullText.length > accumulatedText.length ? fullText : accumulatedText;
-
-    // If streaming missed some text, send the remainder to the client
-    if (fullText.length > accumulatedText.length && !isClosed()) {
-      const missed = fullText.slice(accumulatedText.length);
-      if (missed.trim()) {
-        sendSSE(res, 'text', { content: missed });
-      }
-    }
-
-    if (textForExtraction.trim().length > 0) {
-      sendSSE(res, 'status', { phase: 'extracting' });
-      const suggestions = await extractSuggestions(textForExtraction, destination, tripId);
-      for (const suggestion of suggestions) {
-        if (isClosed()) break;
-        sendSSE(res, 'suggestion', suggestion);
-        await sleep(200);
-      }
-    }
-
+    await streamExtraction(res, textForExtraction, destination, isClosed, tripId, extractionEngine);
     sendSSE(res, 'status', { phase: 'done' });
   } catch (err) {
     console.error('Web Research error:', err);
-    const userMessage = err.status === 529 || err.status === 503
-      ? 'Claude is experiencing high demand. Please try again in a moment.'
-      : `Web Research encountered an error: ${err.message || 'Please try again.'}`;
-    sendSSE(res, 'error', { message: userMessage });
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('503');
+    sendSSE(res, 'error', { message: isOverloaded
+      ? 'The model is experiencing high demand. Please try again in a moment.'
+      : `Web Research encountered an error: ${err.message || 'Please try again.'}` });
   }
 }
 
-// Mode 2: Maps Research — Gemini 2.5 Flash with streaming
-async function handleMapsResearch(res, query, messages, destination, isClosed, tripId) {
-  if (!flashGenAI) {
-    sendSSE(res, 'error', { message: 'Gemini API not configured. Check your GEMINI_API_KEY.' });
+// Mode 2: Maps Research — text engine configurable (Gemini Flash default, or Claude Sonnet)
+async function handleMapsResearch(res, query, messages, destination, isClosed, tripId, engine = 'gemini-flash', extractionEngine = 'gemini-flash') {
+  if (engine === 'claude-sonnet' ? !anthropic : !flashGenAI) {
+    sendSSE(res, 'error', { message: `${engine === 'claude-sonnet' ? 'Anthropic' : 'Gemini'} API not configured.` });
     return;
   }
 
   sendSSE(res, 'status', { phase: 'researching' });
 
-  const model = flashGenAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+  const systemPrompt = `You are a local travel expert and maps researcher for ${destination}. You specialize in finding specific places, routes, neighborhoods, and geographic recommendations. For every recommendation you make, include: the full place name, full street address, neighborhood/area, price range, cuisine type or category, operating hours if known, 2-3 must-try dishes or highlights, walking/transit directions from popular areas, and any practical tips or caveats. Aim for at least 5 specific named places per response. Include geographic context like nearby landmarks and how to get there.`;
 
-  const chatHistory = (messages || []).map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
-  }));
+  try {
+    const params = { systemPrompt, query, messages, isClosed, tripId, operation: 'maps-research' };
+    const text = engine === 'claude-sonnet'
+      ? await streamClaudeText(res, params)
+      : await streamGeminiText(res, params);
+    if (isClosed()) return;
 
-  const chat = model.startChat({
-    history: chatHistory,
-    systemInstruction: {
-      parts: [{ text: `You are a local travel expert and maps researcher for ${destination}. You specialize in finding specific places, routes, neighborhoods, and geographic recommendations. For every recommendation you make, include: the full place name, full street address, neighborhood/area, price range, cuisine type or category, operating hours if known, 2-3 must-try dishes or highlights, walking/transit directions from popular areas, and any practical tips or caveats. Aim for at least 5 specific named places per response. Include geographic context like nearby landmarks and how to get there.` }],
-    },
-  });
-
-  const maxRetries = 2;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const result = await chat.sendMessageStream(query);
-      let accumulatedText = '';
-
-      for await (const chunk of result.stream) {
-        if (isClosed()) break;
-        const text = chunk.text();
-        if (text) {
-          accumulatedText += text;
-          sendSSE(res, 'text', { content: text });
-        }
-      }
-
-      if (isClosed()) return;
-
-      const estimatedInputTokens = Math.ceil(query.length / 4);
-      const estimatedOutputTokens = Math.ceil(accumulatedText.length / 4);
-      recordCost({ tripId, service: 'gemini-flash', operation: 'maps-research', model: 'gemini-3.5-flash', inputTokens: estimatedInputTokens, outputTokens: estimatedOutputTokens });
-
-      if (accumulatedText.trim().length > 0) {
-        sendSSE(res, 'status', { phase: 'extracting' });
-        const suggestions = await extractSuggestions(accumulatedText, destination, tripId);
-        for (const suggestion of suggestions) {
-          if (isClosed()) break;
-          sendSSE(res, 'suggestion', suggestion);
-          await sleep(200);
-        }
-      }
-
-      sendSSE(res, 'status', { phase: 'done' });
-      return;
-    } catch (err) {
-      console.error('Maps Research error:', err);
-      const is503 = err.status === 503 || err.message?.includes('503');
-      if (is503 && attempt < maxRetries) {
-        sendSSE(res, 'status', { phase: 'retrying' });
-        await sleep(3000 * (attempt + 1));
-        continue;
-      }
-      const userMessage = is503
-        ? 'Gemini is experiencing high demand. Please try again in a moment.'
-        : `Maps Research encountered an error: ${err.message || 'Please try again.'}`;
-      sendSSE(res, 'error', { message: userMessage });
-    }
+    await streamExtraction(res, text, destination, isClosed, tripId, extractionEngine);
+    sendSSE(res, 'status', { phase: 'done' });
+  } catch (err) {
+    console.error('Maps Research error:', err);
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('503');
+    sendSSE(res, 'error', { message: isOverloaded
+      ? 'The model is experiencing high demand. Please try again in a moment.'
+      : `Maps Research encountered an error: ${err.message || 'Please try again.'}` });
   }
 }
 
-// Mode 3: Questions — Claude Sonnet 4.6 streaming
-async function handleQuestions(res, query, messages, destination, isClosed, tripId) {
-  if (!anthropic) {
-    sendSSE(res, 'error', { message: 'Anthropic API not configured. Check your ANTHROPIC_API_KEY.' });
+// Mode 3: Questions — text engine configurable (Claude Sonnet default, or Gemini Flash)
+async function handleQuestions(res, query, messages, destination, isClosed, tripId, engine = 'gemini-flash', extractionEngine = 'gemini-flash') {
+  if (engine === 'claude-sonnet' ? !anthropic : !flashGenAI) {
+    sendSSE(res, 'error', { message: `${engine === 'claude-sonnet' ? 'Anthropic' : 'Gemini'} API not configured.` });
     return;
   }
 
@@ -490,52 +609,21 @@ async function handleQuestions(res, query, messages, destination, isClosed, trip
 
   const systemPrompt = `You are a travel research assistant helping plan a trip to ${destination}. For every recommendation you make, include: the full place name, full street address, price range, cuisine type or category, operating hours if known, 2-3 must-try dishes or highlights, and any practical tips or caveats. Aim for at least 5 specific named places per response. Be conversational and helpful.`;
 
-  const chatMessages = (messages || []).map(m => ({
-    role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: m.content,
-  }));
-  chatMessages.push({ role: 'user', content: query });
-
   try {
-    const stream = anthropic.messages.stream({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: chatMessages,
-    });
-
-    let accumulatedText = '';
-
-    stream.on('text', (text) => {
-      if (isClosed()) return;
-      accumulatedText += text;
-      sendSSE(res, 'text', { content: text });
-    });
-
-    const finalMessage = await stream.finalMessage();
+    const params = { systemPrompt, query, messages, isClosed, tripId, operation: 'questions-chat' };
+    const text = engine === 'claude-sonnet'
+      ? await streamClaudeText(res, params)
+      : await streamGeminiText(res, params);
     if (isClosed()) return;
 
-    const inputTokens = finalMessage.usage?.input_tokens || 0;
-    const outputTokens = finalMessage.usage?.output_tokens || 0;
-    recordCost({ tripId, service: 'claude-sonnet', operation: 'questions-chat', model: 'claude-sonnet-4-6', inputTokens, outputTokens });
-
-    if (accumulatedText.trim().length > 0) {
-      sendSSE(res, 'status', { phase: 'extracting' });
-      const suggestions = await extractSuggestions(accumulatedText, destination, tripId);
-      for (const suggestion of suggestions) {
-        if (isClosed()) break;
-        sendSSE(res, 'suggestion', suggestion);
-        await sleep(200);
-      }
-    }
-
+    await streamExtraction(res, text, destination, isClosed, tripId, extractionEngine);
     sendSSE(res, 'status', { phase: 'done' });
   } catch (err) {
     console.error('Questions mode error:', err);
-    const userMessage = err.status === 529 || err.status === 503
-      ? 'Claude is experiencing high demand. Please try again in a moment.'
-      : `Something went wrong: ${err.message || 'Please try again.'}`;
-    sendSSE(res, 'error', { message: userMessage });
+    const isOverloaded = err.status === 529 || err.status === 503 || err.message?.includes('503');
+    sendSSE(res, 'error', { message: isOverloaded
+      ? 'The model is experiencing high demand. Please try again in a moment.'
+      : `Something went wrong: ${err.message || 'Please try again.'}` });
   }
 }
 

@@ -140,7 +140,7 @@ router.get('/:id', async (req, res, next) => {
 // PUT /api/trips/:id - Update a trip
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, destination, startDate, endDate, coverImageUrl, mealPreferences, activityPreferences } = req.body;
+    const { name, destination, startDate, endDate, coverImageUrl, mealPreferences, activityPreferences, modelConfig } = req.body;
 
     const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
     if (!trip) {
@@ -157,6 +157,7 @@ router.put('/:id', async (req, res, next) => {
         ...(coverImageUrl !== undefined && { coverImageUrl }),
         ...(mealPreferences !== undefined && { mealPreferences }),
         ...(activityPreferences !== undefined && { activityPreferences }),
+        ...(modelConfig !== undefined && { modelConfig: typeof modelConfig === 'string' ? modelConfig : JSON.stringify(modelConfig) }),
       }
     });
 

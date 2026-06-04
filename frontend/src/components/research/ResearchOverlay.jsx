@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { ArrowLeft, MapPin } from 'lucide-react';
 import ResearchChat from './ResearchChat';
 import SuggestionPanel from './SuggestionPanel';
@@ -11,10 +11,17 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
     () => new Set(savedIdeas.map(i => i.name))
   );
   const [detailSuggestion, setDetailSuggestion] = useState(null);
+  // Enrichment fetched by suggestion cards, keyed by suggestion id, so it can be saved
+  // onto the idea (persisted in the DB) instead of being re-fetched from Places later.
+  const enrichmentMap = useRef(new Map());
 
   const handleSuggestion = useCallback((suggestion) => {
     const id = `${suggestion.name}-${Date.now()}`;
     setSuggestions(prev => [...prev, { ...suggestion, id }]);
+  }, []);
+
+  const handleEnriched = useCallback((suggestion, enriched) => {
+    if (suggestion?.id && enriched) enrichmentMap.current.set(suggestion.id, enriched);
   }, []);
 
   const handleRemoveSuggestion = useCallback((suggestion) => {
@@ -36,11 +43,13 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
         return next;
       });
     } else {
+      const enrichment = enrichmentMap.current.get(suggestion.id);
       const saved = await researchApi.saveIdea(tripId, {
         type: suggestion.type,
         name: suggestion.name,
         description: suggestion.description || '',
-        data: suggestion.data || {},
+        // Persist the already-fetched enrichment onto the idea so it's never re-billed.
+        data: { ...(suggestion.data || {}), ...(enrichment ? { enrichment } : {}) },
       });
       onIdeasChange(prev => [...prev, saved]);
       setSavedNames(prev => new Set([...prev, suggestion.name]));
@@ -111,6 +120,7 @@ export default function ResearchOverlay({ tripId, destination, onClose, savedIde
             savedIds={savedNames}
             onToggleSave={handleToggleSave}
             onRemove={handleRemoveSuggestion}
+            onEnriched={handleEnriched}
             onBubbleClick={setDetailSuggestion}
             tripId={tripId}
             destination={destination}

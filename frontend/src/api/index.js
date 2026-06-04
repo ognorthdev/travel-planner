@@ -73,6 +73,7 @@ export const researchApi = {
   getIdeas: (tripId) => api.get(`/research/${tripId}/ideas`),
   saveIdea: (tripId, data) => api.post(`/research/${tripId}/ideas`, data),
   deleteIdea: (id) => api.delete(`/research/ideas/${id}`),
+  enrichIdea: (id) => api.post(`/research/ideas/${id}/enrich`, {}).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
   reorderIdeas: (tripId, ids) => api.put(`/research/${tripId}/ideas/reorder`, { ideaIds: ids }),
   getSummary: (tripId) => api.get(`/research/${tripId}/summary`),
   saveSummary: (tripId, summary) => api.put(`/research/${tripId}/summary`, { summary }),

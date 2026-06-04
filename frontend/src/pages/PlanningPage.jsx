@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { slotsApi, tripsApi, placesApi } from '../api/index.js';
 import CostBadge from '../components/CostBadge';
+import TimePicker from '../components/TimePicker';
+import { formatTime12 } from '../utils/time.js';
 
 function buildGoogleMapsUrl(name, address) {
   return `https://www.google.com/maps/search/${encodeURIComponent(name + ', ' + address)}`;
@@ -36,6 +38,7 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
   const [enriching, setEnriching] = useState(false);
   const [saved, setSaved] = useState(formData.saved || false);
   const [notes, setNotes] = useState(formData.notes || '');
+  const [time, setTime] = useState(formData.time || '');
   const notesTimer = useRef(null);
 
   const fetchEnrichment = (force = false) => {
@@ -64,8 +67,14 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
     setNotes(value);
     if (notesTimer.current) clearTimeout(notesTimer.current);
     notesTimer.current = setTimeout(() => {
-      onFormDataChange({ ...formData, notes: value });
+      onFormDataChange({ ...formData, notes: value, time });
     }, 800);
+  };
+
+  const handleTimeChange = (value) => {
+    setTime(value);
+    // Include the latest local notes so an unsaved note isn't clobbered.
+    onFormDataChange({ ...formData, time: value, notes });
   };
 
   if (!name) {
@@ -279,6 +288,18 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
             </div>
           )}
 
+          {/* Time */}
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
+            <label className="label flex items-center gap-1.5 mb-2">
+              <Clock size={13} className="text-slate-400" />
+              Time
+            </label>
+            <TimePicker value={time} onChange={handleTimeChange} />
+            {!time && (
+              <p className="text-xs text-slate-500 mt-1.5">Set a time to show it on this card and in your day plan.</p>
+            )}
+          </div>
+
           {/* Notes */}
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
             <label className="label flex items-center gap-1.5 mb-2">
@@ -442,8 +463,20 @@ function HotelForm({ data, onChange, tripId }) {
         <InputField label="Check-out Date" icon={Clock} type="date" value={data.checkOut} onChange={v => onChange({ ...data, checkOut: v })} />
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <InputField label="Check-in Time" icon={Clock} type="time" value={data.time} onChange={v => onChange({ ...data, time: v })} />
-        <InputField label="Check-out Time" icon={Clock} type="time" value={data.checkOutTime} onChange={v => onChange({ ...data, checkOutTime: v })} />
+        <div>
+          <label className="label flex items-center gap-1.5">
+            <Clock size={13} className="text-slate-400" />
+            Check-in Time
+          </label>
+          <TimePicker value={data.time} onChange={v => onChange({ ...data, time: v })} />
+        </div>
+        <div>
+          <label className="label flex items-center gap-1.5">
+            <Clock size={13} className="text-slate-400" />
+            Check-out Time
+          </label>
+          <TimePicker value={data.checkOutTime} onChange={v => onChange({ ...data, checkOutTime: v })} />
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <InputField label="Confirmation #" icon={Hash} value={data.confirmationNumber} onChange={v => onChange({ ...data, confirmationNumber: v })} placeholder="e.g. HTLBK12345" />
@@ -620,7 +653,8 @@ export default function PlanningPage() {
                   const SIcon = sc.icon;
                   const isActive = s.id === slotId;
                   const sName = s.data?.enrichment?.name || s.data?.[sc.previewField] || '';
-                  const sTime = s.data?.time || '';
+                  // Reflect the active slot's unsaved time edit immediately.
+                  const sTime = (s.id === slotId ? (formData.time ?? s.data?.time) : s.data?.time) || '';
                   return (
                     <button
                       key={s.id}
@@ -637,7 +671,7 @@ export default function PlanningPage() {
                           {sc.label}
                         </span>
                         {sTime && (
-                          <span className="text-[10px] text-slate-500 ml-auto">{sTime}</span>
+                          <span className="text-[10px] text-slate-500 ml-auto">{formatTime12(sTime)}</span>
                         )}
                       </div>
                       {sName && (

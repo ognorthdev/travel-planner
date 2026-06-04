@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GripVertical, ChevronRight, Clock, X } from 'lucide-react';
 import SLOT_CONFIG from '../config/slotTypes.js';
+import { formatTime12 } from '../utils/time.js';
 
 export default function SlotCard({ slot, dayId, tripId, onDelete, index, isDragging, onDragStateChange, onClick, onDragStart, compact }) {
   const navigate = useNavigate();
@@ -74,17 +75,17 @@ export default function SlotCard({ slot, dayId, tripId, onDelete, index, isDragg
             {time && (
               <span className="flex items-center gap-0.5 text-xs text-slate-400">
                 <Clock size={10} />
-                {time}
+                {formatTime12(time)}
               </span>
             )}
           </div>
           {!isEmpty ? (
             <>
-              <p className="text-sm font-medium text-slate-200 truncate mt-0.5">
+              <p className="text-[10px] font-medium text-slate-200 truncate mt-0.5">
                 {preview}
               </p>
               {description && (
-                <p className="text-xs text-slate-400 truncate mt-0.5">
+                <p className="text-[10px] text-slate-400 truncate mt-0.5">
                   {description}
                 </p>
               )}

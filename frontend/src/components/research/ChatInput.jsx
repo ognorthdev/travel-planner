@@ -64,8 +64,8 @@ export default function ChatInput({ onSend, disabled, mode, onModeChange }) {
           onKeyDown={handleKeyDown}
           placeholder={
             mode === 'web' ? 'Discover new activity/meal ideas...' :
-            mode === 'maps' ? 'Find places, routes, neighborhoods...' :
-            'Ask a quick question...'
+            mode === 'maps' ? 'Lookup places you know...' :
+            'Ask questions about your trip...'
           }
           disabled={disabled}
           rows={1}
