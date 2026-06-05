@@ -42,10 +42,18 @@ Then push the schema and run:
 ```bash
 cd backend
 npx prisma generate
-npx prisma db push        # creates the tables in Supabase Postgres
+npx prisma db push                       # creates the tables in Supabase Postgres
+psql "$DATABASE_URL" -f prisma/rls.sql   # lock down the Data API (see below)
 cd ..
 npm run dev               # frontend + backend together
 ```
+
+> **Why `rls.sql`:** Supabase exposes the `public` schema via its Data API using the
+> anon key (which ships to the browser). Without Row-Level Security, that API could
+> read/write our tables directly, bypassing the Express authorization. `rls.sql`
+> enables RLS with no policies, blocking the Data API; our backend connects as the
+> `postgres` role and bypasses RLS, so it keeps working. Re-run it whenever you add
+> a new table.
 
 Visit http://localhost:5173 → you'll be redirected to `/login`. Sign up, and you're in.
 
@@ -67,7 +75,7 @@ New **Web Service**, connected to the repo:
 - **Start command:** `npm start`
 - **Environment variables:** `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-side only — needed to invite collaborators by email), `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_MAPS_API_KEY`, `NODE_ENV=production`, and `TRUSTED_ORIGINS=https://<your-pages-domain>` (set after step 5). Render provides `PORT` automatically.
 
-Run `npx prisma db push` once against the production DB (locally with the prod `DATABASE_URL`, or via a one-off Render shell).
+Run `npx prisma db push` once against the production DB (locally with the prod `DATABASE_URL`, or via a one-off Render shell), then apply `prisma/rls.sql` the same way.
 
 ## 5. Deploy the frontend → Cloudflare Pages
 
@@ -89,6 +97,7 @@ After this deploys, set the backend's `TRUSTED_ORIGINS` (on Render) to the Cloud
       cross-day/cross-trip writes (reorder/move) validated
 - [x] Owner-only actions (delete trip, manage collaborators) enforce the OWNER role
 - [x] Service role key used server-side only (collaborator email lookup); never sent to the client
+- [x] RLS enabled on all public tables (`prisma/rls.sql`) so the Supabase Data API can't bypass backend authorization
 - [x] Secrets in env vars / platform secret stores, never committed
 - [x] CORS limited to known frontend origins
 - [ ] Email confirmation enabled (optional, recommended for public launch)
