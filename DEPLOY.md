@@ -11,11 +11,11 @@ Stack (all free tier):
 
 ## 1. Supabase configuration
 
-1. **Auth → Providers → Email:** make sure *Email* is enabled (email + password).
-2. **Email confirmation:** for a quick friends-test, you can turn *"Confirm email"* off (instant sign-in). Leave it on for stronger security — the login page already handles the "check your email" case.
+1. **Auth → Sign In / Providers → Email:** make sure *Email* is enabled (email + password).
+2. **Email confirmation:** **turn *"Confirm email"* OFF** for the friends-test. The app gates new users with its own admin-approval step (below), so the email round-trip is redundant — and Supabase's free email is rate-limited and spam-prone. (You can re-enable it later with custom SMTP if you want.)
 3. **Auth → Policies / password:** set a minimum password length (8+ recommended). The login form enforces 8 client-side; set the server policy to match.
-4. Grab these from **Project Settings → API**: the project URL and the `anon` public key.
-5. Grab the DB connection string from **Connect → ORMs → Prisma** (the pooled `...pooler.supabase.com` URL). It includes your password.
+4. Grab these from **Project Settings → API**: the project URL and the `anon`/publishable key.
+5. Grab the DB connection string from **Connect → Session pooler** (the `...pooler.supabase.com:5432` URL — IPv4, works from local + Render; the direct `db.<ref>...` host is IPv6-only). It includes your password.
 
 ## 2. Local development
 
@@ -24,7 +24,8 @@ Stack (all free tier):
 ```
 DATABASE_URL=...        # Supabase → Connect → Prisma (pooled)
 SUPABASE_URL=...        # https://<ref>.supabase.co
-SUPABASE_ANON_KEY=...   # anon public key
+SUPABASE_ANON_KEY=...   # anon / publishable key
+ADMIN_EMAILS=you@example.com   # auto-approved + admin (comma-separated)
 TRUSTED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # (existing AI keys stay as-is)
 ```
@@ -43,7 +44,7 @@ Then push the schema and run:
 cd backend
 npx prisma generate
 npx prisma db push                       # creates the tables in Supabase Postgres
-psql "$DATABASE_URL" -f prisma/rls.sql   # lock down the Data API (see below)
+npx prisma db execute --file prisma/rls.sql --schema prisma/schema.prisma   # lock down the Data API
 cd ..
 npm run dev               # frontend + backend together
 ```
@@ -73,9 +74,9 @@ New **Web Service**, connected to the repo:
 - **Root directory:** `backend`
 - **Build command:** `npm install && npx prisma generate`
 - **Start command:** `npm start`
-- **Environment variables:** `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-side only — needed to invite collaborators by email), `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_MAPS_API_KEY`, `NODE_ENV=production`, and `TRUSTED_ORIGINS=https://<your-pages-domain>` (set after step 5). Render provides `PORT` automatically.
+- **Environment variables:** `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ADMIN_EMAILS`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_MAPS_API_KEY`, `NODE_ENV=production`, and `TRUSTED_ORIGINS=https://<your-pages-domain>` (set after step 5). Render provides `PORT` automatically.
 
-Run `npx prisma db push` once against the production DB (locally with the prod `DATABASE_URL`, or via a one-off Render shell), then apply `prisma/rls.sql` the same way.
+Run `npx prisma db push` once against the production DB (locally with the prod `DATABASE_URL`, or via a one-off Render shell), then apply `prisma/rls.sql` the same way (`npx prisma db execute --file prisma/rls.sql --schema prisma/schema.prisma`).
 
 ## 5. Deploy the frontend → Cloudflare Pages
 
@@ -96,16 +97,24 @@ After this deploys, set the backend's `TRUSTED_ORIGINS` (on Render) to the Cloud
 - [x] Nested routes (days/slots/ideas/costs/research/places/ai) ownership-checked per `tripId`;
       cross-day/cross-trip writes (reorder/move) validated
 - [x] Owner-only actions (delete trip, manage collaborators) enforce the OWNER role
-- [x] Service role key used server-side only (collaborator email lookup); never sent to the client
+- [x] New users start **pending**; `requireApproved` blocks all data/AI routes until an admin approves (protects API budget)
+- [x] No Supabase service role key in the app — invites resolve via our own `AppUser` table
 - [x] RLS enabled on all public tables (`prisma/rls.sql`) so the Supabase Data API can't bypass backend authorization
 - [x] Secrets in env vars / platform secret stores, never committed
 - [x] CORS limited to known frontend origins
-- [ ] Email confirmation enabled (optional, recommended for public launch)
 - [ ] Server-side password policy set in Supabase to match the 8-char client rule
+
+## Accounts & approval
+
+- Anyone can **sign up**, but new accounts are **pending** and see an "awaiting approval"
+  screen — they can't create trips or trigger any AI/API calls until approved.
+- Emails listed in `ADMIN_EMAILS` are auto-approved and become **admins**.
+- Admins get an **Admin** link in the header → `/admin` to approve / revoke users.
 
 ## Sharing / collaboration
 
-- A trip's creator is the **OWNER**; they can invite others by email as **EDITOR** (can edit) or
-  **VIEWER** from the **Share** button on the trip page.
-- Invitees must already have a Travel Planner account with that email.
+- A trip's creator is the **OWNER**; from the **Share** button they invite others by email as
+  **EDITOR** (can edit) or **VIEWER**.
+- You can invite an email **before** that person has signed up — the invite is claimed
+  automatically the first time they log in with that email. (They still need admin approval.)
 - The trip list shows trips you own *and* trips shared with you.
