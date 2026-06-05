@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           status=$(curl -s -o /dev/null -w '%{http_code}' \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/trips?select=id&limit=1" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/Trip?select=id&limit=1" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
           echo "Supabase responded with HTTP $status"
