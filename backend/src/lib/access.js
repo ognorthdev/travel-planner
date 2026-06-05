@@ -10,11 +10,12 @@ class HttpError extends Error {
   }
 }
 
-// Membership row for (tripId, userId), or null.
+// Membership row for (tripId, userId), or null. userId is set once the invited
+// email has signed in, so unclaimed invites never grant access.
 function getMembership(tripId, userId) {
   if (!tripId || !userId) return Promise.resolve(null);
-  return prisma.tripMember.findUnique({
-    where: { tripId_userId: { tripId, userId } },
+  return prisma.tripMember.findFirst({
+    where: { tripId, userId },
   });
 }
 

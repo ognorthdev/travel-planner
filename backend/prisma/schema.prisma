@@ -31,19 +31,36 @@ model Trip {
   @@index([userId])
 }
 
-// Who can access a trip. The creator gets an OWNER row; collaborators get
-// EDITOR (or VIEWER). Access checks in the backend resolve through this table,
-// so a trip can be shared with one or more logins.
+// Who can access a trip. The creator gets an OWNER row; collaborators are
+// invited by email. `userId` is filled in once that email signs in (claimed),
+// so you can invite someone before they have an account.
 model TripMember {
   id        String   @id @default(cuid())
   tripId    String
-  userId    String   // Supabase Auth user id
+  email     String   // invite email, lowercased
+  userId    String?  // Supabase Auth user id, set when the invite is claimed
   role      String   @default("EDITOR") // OWNER | EDITOR | VIEWER
   createdAt DateTime @default(now())
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
-  @@unique([tripId, userId])
+  @@unique([tripId, email])
   @@index([userId])
+  @@index([email])
+}
+
+// App-level account record, keyed to the Supabase Auth user. Holds approval
+// status (new users start `pending` until an admin approves them) and admin
+// flag. Created on a user's first authenticated request.
+model AppUser {
+  id        String   @id @default(cuid())
+  userId    String   @unique // Supabase Auth user id
+  email     String
+  status    String   @default("pending") // pending | approved
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
 }
 
 model ApiCost {

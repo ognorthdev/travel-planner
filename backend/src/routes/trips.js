@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const { assertTripAccess } = require('../lib/access');
-const { findUserByEmail, getEmailsByIds } = require('../lib/supabaseAdmin');
 
 const prisma = new PrismaClient();
 
@@ -60,7 +59,7 @@ router.post('/', async (req, res, next) => {
         coverImageUrl: coverImageUrl || null,
         userId: req.user.id,
         // creator becomes the OWNER member
-        members: { create: { userId: req.user.id, role: 'OWNER' } },
+        members: { create: { email: req.user.email, userId: req.user.id, role: 'OWNER' } },
       },
     });
 
@@ -225,11 +224,11 @@ router.get('/:id/members', async (req, res, next) => {
       where: { tripId: req.params.id },
       orderBy: { createdAt: 'asc' },
     });
-    const emails = await getEmailsByIds(members.map((m) => m.userId));
     res.json(members.map((m) => ({
-      userId: m.userId,
+      id: m.id,
+      email: m.email,
       role: m.role,
-      email: emails[m.userId] || null,
+      joined: !!m.userId, // false = invited but hasn't signed up yet
       isYou: m.userId === req.user.id,
     })));
   } catch (err) {
@@ -246,46 +245,42 @@ router.post('/:id/members', async (req, res, next) => {
     if (!email) {
       return res.status(400).json({ error: 'email is required' });
     }
+    const lower = email.trim().toLowerCase();
+    if (lower === req.user.email) {
+      return res.status(400).json({ error: "You're already on this trip" });
+    }
     const normalizedRole = role === 'VIEWER' ? 'VIEWER' : 'EDITOR';
 
-    const user = await findUserByEmail(email);
-    if (!user) {
-      return res.status(404).json({ error: 'No account found with that email. Ask them to sign up first.' });
-    }
-    if (user.id === req.user.id) {
-      return res.status(400).json({ error: "You're already the owner of this trip" });
-    }
+    // If that email already has an account, link it now; otherwise the invite
+    // is claimed automatically when they first sign in.
+    const existing = await prisma.appUser.findFirst({ where: { email: lower } });
 
     const member = await prisma.tripMember.upsert({
-      where: { tripId_userId: { tripId: req.params.id, userId: user.id } },
-      update: { role: normalizedRole },
-      create: { tripId: req.params.id, userId: user.id, role: normalizedRole },
+      where: { tripId_email: { tripId: req.params.id, email: lower } },
+      update: { role: normalizedRole, ...(existing ? { userId: existing.userId } : {}) },
+      create: { tripId: req.params.id, email: lower, userId: existing?.userId || null, role: normalizedRole },
     });
 
-    res.status(201).json({ userId: member.userId, role: member.role, email: user.email });
+    res.status(201).json({ id: member.id, email: member.email, role: member.role, joined: !!member.userId });
   } catch (err) {
     next(err);
   }
 });
 
-// DELETE /api/trips/:id/members/:userId - remove a collaborator (owner only)
-router.delete('/:id/members/:userId', async (req, res, next) => {
+// DELETE /api/trips/:id/members/:memberId - remove a collaborator (owner only)
+router.delete('/:id/members/:memberId', async (req, res, next) => {
   try {
     await assertTripAccess(req.params.id, req.user.id, { requireOwner: true });
 
-    const target = await prisma.tripMember.findUnique({
-      where: { tripId_userId: { tripId: req.params.id, userId: req.params.userId } },
-    });
-    if (!target) {
+    const target = await prisma.tripMember.findUnique({ where: { id: req.params.memberId } });
+    if (!target || target.tripId !== req.params.id) {
       return res.status(404).json({ error: 'Member not found' });
     }
     if (target.role === 'OWNER') {
       return res.status(400).json({ error: 'The owner cannot be removed' });
     }
 
-    await prisma.tripMember.delete({
-      where: { tripId_userId: { tripId: req.params.id, userId: req.params.userId } },
-    });
+    await prisma.tripMember.delete({ where: { id: req.params.memberId } });
     res.json({ message: 'Collaborator removed' });
   } catch (err) {
     next(err);

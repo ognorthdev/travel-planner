@@ -52,11 +52,11 @@ export default function ShareModal({ tripId, onClose }) {
     }
   };
 
-  const handleRemove = async (userId) => {
+  const handleRemove = async (memberId) => {
     setError(null);
     setInfo(null);
     try {
-      await membersApi.remove(tripId, userId);
+      await membersApi.remove(tripId, memberId);
       await load();
     } catch (err) {
       setError(err.message || 'Could not remove that person');
@@ -120,17 +120,20 @@ export default function ShareModal({ tripId, onClose }) {
             </div>
           ) : (
             members.map((m) => (
-              <div key={m.userId} className="flex items-center justify-between bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
+              <div key={m.id} className="flex items-center justify-between bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-sm text-slate-200 truncate">
-                    {m.email || m.userId}
+                    {m.email}
                     {m.isYou && <span className="text-slate-500"> (you)</span>}
                   </p>
-                  <p className="text-xs text-slate-500">{ROLE_LABELS[m.role] || m.role}</p>
+                  <p className="text-xs text-slate-500">
+                    {ROLE_LABELS[m.role] || m.role}
+                    {!m.joined && m.role !== 'OWNER' && <span className="text-amber-500"> · invited, not signed up yet</span>}
+                  </p>
                 </div>
                 {isOwner && m.role !== 'OWNER' && (
                   <button
-                    onClick={() => handleRemove(m.userId)}
+                    onClick={() => handleRemove(m.id)}
                     className="p-1.5 rounded-lg hover:bg-slate-700 text-slate-500 hover:text-red-400 transition-colors"
                     title="Remove collaborator"
                   >

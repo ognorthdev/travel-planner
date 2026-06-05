@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage.jsx';
 import TripPage from './pages/TripPage.jsx';
 import PlanningPage from './pages/PlanningPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
+import AdminPage from './pages/AdminPage.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { AuthProvider } from './lib/auth.jsx';
 
@@ -13,6 +14,7 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/admin" element={<ProtectedRoute adminOnly><AdminPage /></ProtectedRoute>} />
           <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/trips/:tripId" element={<ProtectedRoute><TripPage /></ProtectedRoute>} />
           <Route

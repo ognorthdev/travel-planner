@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, MapPin, Calendar, Plane, X, Loader2, Globe } from 'lucide-react';
+import { Plus, MapPin, Calendar, Plane, X, Loader2, Globe, LogOut, Shield } from 'lucide-react';
 import { tripsApi } from '../api/index.js';
 import { InlineCost } from '../components/CostBadge';
+import { useAuth } from '../lib/auth.jsx';
 
 const DESTINATION_EMOJIS = {
   paris: '🗼', france: '🗼',
@@ -247,6 +248,7 @@ export default function HomePage() {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const navigate = useNavigate();
+  const { profile, signOut } = useAuth();
 
   useEffect(() => {
     loadTrips();
@@ -285,13 +287,32 @@ export default function HomePage() {
                 <p className="text-xs text-slate-400 leading-tight">Plan your adventures</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowModal(true)}
-              className="btn-primary"
-            >
-              <Plus size={18} />
-              New Trip
-            </button>
+            <div className="flex items-center gap-2">
+              {profile?.isAdmin && (
+                <button
+                  onClick={() => navigate('/admin')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 hover:text-slate-100 transition-colors text-sm font-medium"
+                >
+                  <Shield size={14} />
+                  Admin
+                </button>
+              )}
+              <button
+                onClick={() => signOut()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 hover:text-slate-100 transition-colors text-sm font-medium"
+                title="Sign out"
+              >
+                <LogOut size={14} />
+                Sign out
+              </button>
+              <button
+                onClick={() => setShowModal(true)}
+                className="btn-primary"
+              >
+                <Plus size={18} />
+                New Trip
+              </button>
+            </div>
           </div>
         </div>
       </header>

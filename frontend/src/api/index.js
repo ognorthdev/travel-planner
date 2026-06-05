@@ -48,7 +48,19 @@ export const tripsApi = {
 export const membersApi = {
   list: (tripId) => api.get(`/trips/${tripId}/members`),
   invite: (tripId, email, role) => api.post(`/trips/${tripId}/members`, { email, role }),
-  remove: (tripId, userId) => api.delete(`/trips/${tripId}/members/${userId}`),
+  remove: (tripId, memberId) => api.delete(`/trips/${tripId}/members/${memberId}`),
+};
+
+// Current user's account status
+export const meApi = {
+  get: () => api.get('/me'),
+};
+
+// Admin (approve users)
+export const adminApi = {
+  listUsers: () => api.get('/admin/users'),
+  approve: (userId) => api.post(`/admin/users/${userId}/approve`),
+  revoke: (userId) => api.post(`/admin/users/${userId}/revoke`),
 };
 
 // Days
