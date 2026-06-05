@@ -38,25 +38,44 @@ VITE_SUPABASE_ANON_KEY=...
 VITE_API_URL=           # leave empty locally (Vite proxies /api)
 ```
 
-Then push the schema and run:
+Then apply migrations and run:
 
 ```bash
 cd backend
 npx prisma generate
-npx prisma db push                       # creates the tables in Supabase Postgres
-npx prisma db execute --file prisma/rls.sql --schema prisma/schema.prisma   # lock down the Data API
+npx prisma migrate deploy   # applies all migrations (tables + RLS) to Supabase
 cd ..
-npm run dev               # frontend + backend together
+npm run dev                 # frontend + backend together
 ```
 
-> **Why `rls.sql`:** Supabase exposes the `public` schema via its Data API using the
-> anon key (which ships to the browser). Without Row-Level Security, that API could
-> read/write our tables directly, bypassing the Express authorization. `rls.sql`
-> enables RLS with no policies, blocking the Data API; our backend connects as the
-> `postgres` role and bypasses RLS, so it keeps working. Re-run it whenever you add
-> a new table.
+> **Why RLS is in the migration:** Supabase exposes the `public` schema via its Data
+> API using the anon key (which ships to the browser). Without Row-Level Security, that
+> API could read/write our tables directly, bypassing the Express authorization. The
+> initial migration enables RLS (no policies) on every table, blocking the Data API;
+> our backend connects as the `postgres` role and bypasses RLS, so it keeps working.
 
 Visit http://localhost:5173 → you'll be redirected to `/login`. Sign up, and you're in.
+
+### Changing the schema later
+
+Migrations are versioned in `backend/prisma/migrations/` and applied automatically on
+deploy. To add a change (Supabase has no shadow DB, so generate the SQL by diffing the
+live DB rather than `migrate dev`):
+
+```bash
+cd backend
+# 1. edit prisma/schema.prisma, then generate the delta into a new migration:
+mkdir -p prisma/migrations/$(date +%Y%m%d%H%M%S)_change
+npx prisma migrate diff \
+  --from-url "$DATABASE_URL" \
+  --to-schema-datamodel prisma/schema.prisma \
+  --script > prisma/migrations/<that-folder>/migration.sql
+# 2. if you added a TABLE, append `ALTER TABLE "X" ENABLE ROW LEVEL SECURITY;`
+# 3. apply + commit:
+npx prisma migrate deploy
+```
+
+On push, Render runs `migrate deploy` and applies the same migration to production.
 
 ## 3. Keep-alive (GitHub Actions)
 
@@ -71,12 +90,17 @@ The workflow at `.github/workflows/supabase-keepalive.yml` runs every 3 days and
 
 New **Web Service**, connected to the repo:
 
+Easiest path: **New ▸ Blueprint** and pick the repo — Render reads `render.yaml` and
+prompts for each secret. (Or configure a Web Service manually with the settings below.)
+
 - **Root directory:** `backend`
-- **Build command:** `npm install && npx prisma generate`
+- **Build command:** `npm install && npx prisma generate && npx prisma migrate deploy`
 - **Start command:** `npm start`
 - **Environment variables:** `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ADMIN_EMAILS`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_MAPS_API_KEY`, `NODE_ENV=production`, and `TRUSTED_ORIGINS=https://<your-pages-domain>` (set after step 5). Render provides `PORT` automatically.
 
-Run `npx prisma db push` once against the production DB (locally with the prod `DATABASE_URL`, or via a one-off Render shell), then apply `prisma/rls.sql` the same way (`npx prisma db execute --file prisma/rls.sql --schema prisma/schema.prisma`).
+The build's `migrate deploy` step applies migrations to Supabase automatically — no
+manual DB step. With native Git integration, every push to the deploy branch redeploys
+the backend (and re-runs migrations).
 
 ## 5. Deploy the frontend → Cloudflare Pages
 
