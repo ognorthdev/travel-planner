@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const { recordCost, calculatePlacesCost } = require('../costs');
+const { assertTripAccess, tripIdForSlot } = require('../lib/access');
 
 const prisma = new PrismaClient();
 
@@ -41,6 +42,7 @@ router.get('/days/:dayId/slots', async (req, res, next) => {
     if (!day) {
       return res.status(404).json({ error: 'Day not found' });
     }
+    await assertTripAccess(day.tripId, req.user.id);
 
     const slots = await prisma.slot.findMany({
       where: { dayId: req.params.dayId },
@@ -65,6 +67,7 @@ router.post('/days/:dayId/slots', async (req, res, next) => {
     if (!day) {
       return res.status(404).json({ error: 'Day not found' });
     }
+    await assertTripAccess(day.tripId, req.user.id);
 
     const { type, sortOrder, data } = req.body;
 
@@ -113,6 +116,7 @@ router.get('/slots/:id', async (req, res, next) => {
     if (!slot) {
       return res.status(404).json({ error: 'Slot not found' });
     }
+    await assertTripAccess(await tripIdForSlot(req.params.id), req.user.id);
 
     res.json({
       ...slot,
@@ -130,6 +134,7 @@ router.put('/slots/:id', async (req, res, next) => {
     if (!slot) {
       return res.status(404).json({ error: 'Slot not found' });
     }
+    await assertTripAccess(await tripIdForSlot(req.params.id), req.user.id);
 
     const { type, sortOrder, data } = req.body;
 
@@ -162,10 +167,16 @@ router.put('/days/:dayId/slots/reorder', async (req, res, next) => {
     if (!day) {
       return res.status(404).json({ error: 'Day not found' });
     }
+    await assertTripAccess(day.tripId, req.user.id);
 
     const { slotIds } = req.body;
     if (!Array.isArray(slotIds)) {
       return res.status(400).json({ error: 'slotIds must be an array' });
+    }
+    // all reordered slots must belong to this day (no cross-day/trip writes)
+    const ownedCount = await prisma.slot.count({ where: { id: { in: slotIds }, dayId: req.params.dayId } });
+    if (ownedCount !== slotIds.length) {
+      return res.status(400).json({ error: 'All slotIds must belong to this day' });
     }
 
     await prisma.$transaction(
@@ -200,6 +211,8 @@ router.put('/slots/:id/move', async (req, res, next) => {
     if (!slot) {
       return res.status(404).json({ error: 'Slot not found' });
     }
+    const sourceTripId = await tripIdForSlot(req.params.id);
+    await assertTripAccess(sourceTripId, req.user.id);
 
     const { targetDayId, position } = req.body;
     if (!targetDayId) {
@@ -209,6 +222,10 @@ router.put('/slots/:id/move', async (req, res, next) => {
     const targetDay = await prisma.day.findUnique({ where: { id: targetDayId } });
     if (!targetDay) {
       return res.status(404).json({ error: 'Target day not found' });
+    }
+    await assertTripAccess(targetDay.tripId, req.user.id);
+    if (targetDay.tripId !== sourceTripId) {
+      return res.status(400).json({ error: 'Cannot move a slot to a different trip' });
     }
 
     const targetSlots = await prisma.slot.findMany({
@@ -259,6 +276,7 @@ router.delete('/slots/:id', async (req, res, next) => {
     if (!slot) {
       return res.status(404).json({ error: 'Slot not found' });
     }
+    await assertTripAccess(await tripIdForSlot(req.params.id), req.user.id);
 
     await prisma.slot.delete({ where: { id: req.params.id } });
     res.json({ message: 'Slot deleted successfully' });
@@ -275,6 +293,7 @@ router.post('/slots/:id/enrich', async (req, res, next) => {
       include: { day: { include: { slots: true, trip: true } } }
     });
     if (!slot) return res.status(404).json({ error: 'Slot not found' });
+    await assertTripAccess(slot.day.tripId, req.user.id);
 
     const slotData = typeof slot.data === 'string' ? JSON.parse(slot.data) : slot.data;
 

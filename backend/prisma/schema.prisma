@@ -23,11 +23,26 @@ model Trip {
   ideas                Idea[]
   chatSummary          ChatSummary?
   apiCosts             ApiCost[]
-  // Owner = Supabase Auth user id (UUID from the JWT `sub` claim).
-  // Supabase manages the auth.users table; we just store + index the id and
-  // enforce per-user scoping in the backend on every query.
+  members              TripMember[]
+  // Creator/owner = Supabase Auth user id (UUID from the JWT `sub` claim).
+  // Denormalized for convenience; the canonical access list is TripMember.
   userId               String
 
+  @@index([userId])
+}
+
+// Who can access a trip. The creator gets an OWNER row; collaborators get
+// EDITOR (or VIEWER). Access checks in the backend resolve through this table,
+// so a trip can be shared with one or more logins.
+model TripMember {
+  id        String   @id @default(cuid())
+  tripId    String
+  userId    String   // Supabase Auth user id
+  role      String   @default("EDITOR") // OWNER | EDITOR | VIEWER
+  createdAt DateTime @default(now())
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, userId])
   @@index([userId])
 }
 

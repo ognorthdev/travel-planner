@@ -44,6 +44,13 @@ export const tripsApi = {
   delete: (id) => api.delete(`/trips/${id}`)
 };
 
+// Trip collaborators (sharing)
+export const membersApi = {
+  list: (tripId) => api.get(`/trips/${tripId}/members`),
+  invite: (tripId, email, role) => api.post(`/trips/${tripId}/members`, { email, role }),
+  remove: (tripId, userId) => api.delete(`/trips/${tripId}/members/${userId}`),
+};
+
 // Days
 export const daysApi = {
   getByTrip: (tripId) => api.get(`/trips/${tripId}/days`),

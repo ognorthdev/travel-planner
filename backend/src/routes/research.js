@@ -3,6 +3,7 @@ const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const { recordCost, calculatePlacesCost } = require('../costs');
 const { fetchEnrichment } = require('../enrichment');
+const { assertTripAccess } = require('../lib/access');
 
 const prisma = new PrismaClient();
 
@@ -247,6 +248,7 @@ function sleep(ms) {
 // GET /api/research/:tripId/ideas
 router.get('/:tripId/ideas', async (req, res, next) => {
   try {
+    await assertTripAccess(req.params.tripId, req.user.id);
     const ideas = await prisma.idea.findMany({
       where: { tripId: req.params.tripId },
       orderBy: { sortOrder: 'asc' }
@@ -263,6 +265,7 @@ router.get('/:tripId/ideas', async (req, res, next) => {
 // POST /api/research/:tripId/ideas
 router.post('/:tripId/ideas', async (req, res, next) => {
   try {
+    await assertTripAccess(req.params.tripId, req.user.id);
     const { type, name, description, data } = req.body;
     if (!type || !name) {
       return res.status(400).json({ error: 'type and name are required' });
@@ -301,6 +304,7 @@ router.post('/ideas/:id/enrich', async (req, res, next) => {
     if (!idea) {
       return res.status(404).json({ error: 'Idea not found' });
     }
+    await assertTripAccess(idea.tripId, req.user.id);
     const data = typeof idea.data === 'string' ? JSON.parse(idea.data || '{}') : (idea.data || {});
 
     if (data.enrichment && !req.body.force) {
@@ -328,6 +332,7 @@ router.delete('/ideas/:id', async (req, res, next) => {
     if (!idea) {
       return res.status(404).json({ error: 'Idea not found' });
     }
+    await assertTripAccess(idea.tripId, req.user.id);
     await prisma.idea.delete({ where: { id: req.params.id } });
     res.json({ message: 'Idea deleted' });
   } catch (err) {
@@ -338,9 +343,15 @@ router.delete('/ideas/:id', async (req, res, next) => {
 // PUT /api/research/:tripId/ideas/reorder
 router.put('/:tripId/ideas/reorder', async (req, res, next) => {
   try {
+    await assertTripAccess(req.params.tripId, req.user.id);
     const { ideaIds } = req.body;
     if (!Array.isArray(ideaIds)) {
       return res.status(400).json({ error: 'ideaIds array is required' });
+    }
+    // all reordered ideas must belong to this trip
+    const ownedCount = await prisma.idea.count({ where: { id: { in: ideaIds }, tripId: req.params.tripId } });
+    if (ownedCount !== ideaIds.length) {
+      return res.status(400).json({ error: 'All ideaIds must belong to this trip' });
     }
 
     await Promise.all(
@@ -368,6 +379,7 @@ router.put('/:tripId/ideas/reorder', async (req, res, next) => {
 // GET /api/research/:tripId/summary
 router.get('/:tripId/summary', async (req, res, next) => {
   try {
+    await assertTripAccess(req.params.tripId, req.user.id);
     const summary = await prisma.chatSummary.findUnique({
       where: { tripId: req.params.tripId }
     });
@@ -383,6 +395,7 @@ router.get('/:tripId/summary', async (req, res, next) => {
 // PUT /api/research/:tripId/summary
 router.put('/:tripId/summary', async (req, res, next) => {
   try {
+    await assertTripAccess(req.params.tripId, req.user.id);
     const { summary } = req.body;
     if (!summary) {
       return res.status(400).json({ error: 'summary is required' });
@@ -402,6 +415,7 @@ router.put('/:tripId/summary', async (req, res, next) => {
 // POST /api/research/:tripId/extract — re-extract idea cards from a single message's text
 router.post('/:tripId/extract', async (req, res, next) => {
   try {
+    await assertTripAccess(req.params.tripId, req.user.id);
     const { text, destination } = req.body;
     if (!text || !destination) {
       return res.status(400).json({ error: 'text and destination are required' });
@@ -419,6 +433,13 @@ router.post('/:tripId/stream', async (req, res) => {
   const { query, mode, messages, destination, mealPreferences, activityPreferences } = req.body;
   if (!query || !destination) {
     return res.status(400).json({ error: 'query and destination are required' });
+  }
+
+  // Verify access before switching to the SSE response.
+  try {
+    await assertTripAccess(req.params.tripId, req.user.id);
+  } catch (err) {
+    return res.status(err.status || 403).json({ error: err.message || 'Forbidden' });
   }
 
   res.writeHead(200, {

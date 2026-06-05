@@ -65,7 +65,7 @@ New **Web Service**, connected to the repo:
 - **Root directory:** `backend`
 - **Build command:** `npm install && npx prisma generate`
 - **Start command:** `npm start`
-- **Environment variables:** `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_MAPS_API_KEY`, `NODE_ENV=production`, and `TRUSTED_ORIGINS=https://<your-pages-domain>` (set after step 5). Render provides `PORT` automatically.
+- **Environment variables:** `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-side only — needed to invite collaborators by email), `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_MAPS_API_KEY`, `NODE_ENV=production`, and `TRUSTED_ORIGINS=https://<your-pages-domain>` (set after step 5). Render provides `PORT` automatically.
 
 Run `npx prisma db push` once against the production DB (locally with the prod `DATABASE_URL`, or via a one-off Render shell).
 
@@ -84,11 +84,19 @@ After this deploys, set the backend's `TRUSTED_ORIGINS` (on Render) to the Cloud
 
 - [x] All `/api` data routes require a valid Supabase access token
 - [x] Backend verifies JWTs locally via `getClaims` (asymmetric signing keys)
-- [x] Trips are scoped to the logged-in user on every read/write
+- [x] Trip access resolved through `TripMember` on every read/write (owner + shared collaborators)
+- [x] Nested routes (days/slots/ideas/costs/research/places/ai) ownership-checked per `tripId`;
+      cross-day/cross-trip writes (reorder/move) validated
+- [x] Owner-only actions (delete trip, manage collaborators) enforce the OWNER role
+- [x] Service role key used server-side only (collaborator email lookup); never sent to the client
 - [x] Secrets in env vars / platform secret stores, never committed
 - [x] CORS limited to known frontend origins
-- [ ] **Nested-route authorization** (days/slots/ideas/costs/research) — currently
-      authenticated but not yet ownership-checked per `tripId`. See task
-      "Authorize nested routes (IDOR hardening)".
 - [ ] Email confirmation enabled (optional, recommended for public launch)
 - [ ] Server-side password policy set in Supabase to match the 8-char client rule
+
+## Sharing / collaboration
+
+- A trip's creator is the **OWNER**; they can invite others by email as **EDITOR** (can edit) or
+  **VIEWER** from the **Share** button on the trip page.
+- Invitees must already have a Travel Planner account with that email.
+- The trip list shows trips you own *and* trips shared with you.
