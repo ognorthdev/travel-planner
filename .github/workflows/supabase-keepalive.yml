@@ -1,0 +1,37 @@
+name: Supabase keep-alive
+
+# Supabase pauses free-tier projects after 7 days of NO DATABASE ACTIVITY.
+# This runs a real query every 3 days (comfortable margin) from GitHub's
+# servers, so it works whether or not your laptop is on.
+#
+# Setup (one time): add two repo secrets under
+# Settings → Secrets and variables → Actions:
+#   SUPABASE_URL       e.g. https://<project-ref>.supabase.co
+#   SUPABASE_ANON_KEY  the project's anon/public API key
+#
+# NOTE: a bare health-check URL does NOT reset the pause timer — it must be a
+# query that hits Postgres. The /rest/v1 select below does exactly that.
+
+on:
+  schedule:
+    - cron: '0 6 */3 * *'   # 06:00 UTC, every 3rd day
+  workflow_dispatch: {}       # allow manual runs from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query the database to keep it awake
+        run: |
+          set -euo pipefail
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/Trip?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+          echo "Supabase responded with HTTP $status"
+          # 200 (rows) and 206/empty are fine; anything 4xx/5xx is a failure.
+          if [ "$status" -ge 400 ]; then
+            echo "Keep-alive query failed"
+            exit 1
+          fi
+          echo "Keep-alive succeeded"

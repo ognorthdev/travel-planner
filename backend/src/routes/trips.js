@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
+const { assertTripAccess } = require('../lib/access');
 
 const prisma = new PrismaClient();
 
@@ -8,10 +9,12 @@ const prisma = new PrismaClient();
 router.get('/', async (req, res, next) => {
   try {
     const trips = await prisma.trip.findMany({
+      where: { members: { some: { userId: req.user.id } } },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { days: true } },
         apiCosts: { select: { costCents: true, service: true } },
+        members: { where: { userId: req.user.id }, select: { role: true } },
       }
     });
     const tripsWithCosts = trips.map(trip => {
@@ -20,8 +23,9 @@ router.get('/', async (req, res, next) => {
       for (const c of trip.apiCosts) {
         costByService[c.service] = (costByService[c.service] || 0) + c.costCents;
       }
-      const { apiCosts, ...rest } = trip;
-      return { ...rest, totalCostCents, costByService };
+      const { apiCosts, members, ...rest } = trip;
+      // role of the current user on this trip (OWNER for trips they created)
+      return { ...rest, totalCostCents, costByService, role: members[0]?.role || 'EDITOR' };
     });
     res.json(tripsWithCosts);
   } catch (err) {
@@ -53,6 +57,9 @@ router.post('/', async (req, res, next) => {
         startDate: start,
         endDate: end,
         coverImageUrl: coverImageUrl || null,
+        userId: req.user.id,
+        // creator becomes the OWNER member
+        members: { create: { email: req.user.email, userId: req.user.id, role: 'OWNER' } },
       },
     });
 
@@ -101,8 +108,8 @@ router.post('/', async (req, res, next) => {
 // GET /api/trips/:id - Get a single trip
 router.get('/:id', async (req, res, next) => {
   try {
-    const trip = await prisma.trip.findUnique({
-      where: { id: req.params.id },
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, members: { some: { userId: req.user.id } } },
       include: {
         days: {
           orderBy: { dayNumber: 'asc' },
@@ -142,10 +149,8 @@ router.put('/:id', async (req, res, next) => {
   try {
     const { name, destination, startDate, endDate, coverImageUrl, mealPreferences, activityPreferences, modelConfig } = req.body;
 
-    const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
-    if (!trip) {
-      return res.status(404).json({ error: 'Trip not found' });
-    }
+    // any collaborator may edit trip details
+    await assertTripAccess(req.params.id, req.user.id);
 
     const updatedTrip = await prisma.trip.update({
       where: { id: req.params.id },
@@ -170,10 +175,8 @@ router.put('/:id', async (req, res, next) => {
 // DELETE /api/trips/:id - Delete a trip
 router.delete('/:id', async (req, res, next) => {
   try {
-    const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
-    if (!trip) {
-      return res.status(404).json({ error: 'Trip not found' });
-    }
+    // only the owner may delete the whole trip
+    await assertTripAccess(req.params.id, req.user.id, { requireOwner: true });
 
     await prisma.trip.delete({ where: { id: req.params.id } });
     res.json({ message: 'Trip deleted successfully' });
@@ -185,8 +188,8 @@ router.delete('/:id', async (req, res, next) => {
 // GET /api/trips/:id/locations - Get all filled hotel/activity locations for address dropdown
 router.get('/:id/locations', async (req, res, next) => {
   try {
-    const trip = await prisma.trip.findUnique({
-      where: { id: req.params.id },
+    const trip = await prisma.trip.findFirst({
+      where: { id: req.params.id, members: { some: { userId: req.user.id } } },
       include: {
         days: {
           orderBy: { dayNumber: 'asc' },
@@ -208,6 +211,77 @@ router.get('/:id/locations', async (req, res, next) => {
       }
     }
     res.json(locations);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/trips/:id/members - list collaborators (any member)
+router.get('/:id/members', async (req, res, next) => {
+  try {
+    await assertTripAccess(req.params.id, req.user.id);
+    const members = await prisma.tripMember.findMany({
+      where: { tripId: req.params.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    res.json(members.map((m) => ({
+      id: m.id,
+      email: m.email,
+      role: m.role,
+      joined: !!m.userId, // false = invited but hasn't signed up yet
+      isYou: m.userId === req.user.id,
+    })));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/trips/:id/members - invite a collaborator by email (owner only)
+router.post('/:id/members', async (req, res, next) => {
+  try {
+    await assertTripAccess(req.params.id, req.user.id, { requireOwner: true });
+
+    const { email, role } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'email is required' });
+    }
+    const lower = email.trim().toLowerCase();
+    if (lower === req.user.email) {
+      return res.status(400).json({ error: "You're already on this trip" });
+    }
+    const normalizedRole = role === 'VIEWER' ? 'VIEWER' : 'EDITOR';
+
+    // If that email already has an account, link it now; otherwise the invite
+    // is claimed automatically when they first sign in.
+    const existing = await prisma.appUser.findFirst({ where: { email: lower } });
+
+    const member = await prisma.tripMember.upsert({
+      where: { tripId_email: { tripId: req.params.id, email: lower } },
+      update: { role: normalizedRole, ...(existing ? { userId: existing.userId } : {}) },
+      create: { tripId: req.params.id, email: lower, userId: existing?.userId || null, role: normalizedRole },
+    });
+
+    res.status(201).json({ id: member.id, email: member.email, role: member.role, joined: !!member.userId });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/trips/:id/members/:memberId - remove a collaborator (owner only)
+router.delete('/:id/members/:memberId', async (req, res, next) => {
+  try {
+    await assertTripAccess(req.params.id, req.user.id, { requireOwner: true });
+
+    const target = await prisma.tripMember.findUnique({ where: { id: req.params.memberId } });
+    if (!target || target.tripId !== req.params.id) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+    if (target.role === 'OWNER') {
+      return res.status(400).json({ error: 'The owner cannot be removed' });
+    }
+
+    await prisma.tripMember.delete({ where: { id: req.params.memberId } });
+    res.json({ message: 'Collaborator removed' });
   } catch (err) {
     next(err);
   }

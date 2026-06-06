@@ -1,0 +1,37 @@
+# Render Blueprint for the Travel Planner backend.
+# In Render: New ▸ Blueprint ▸ pick this repo. Render reads this file, creates
+# the service, and prompts you for each secret value (the `sync: false` vars).
+#
+# The frontend is hosted separately on Cloudflare Pages (see DEPLOY.md).
+services:
+  - type: web
+    name: travel-planner-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    # migrate deploy applies any new migrations (incl. RLS) to Supabase on every
+    # deploy, so a push that changes the schema updates the DB automatically.
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Secrets — Render will prompt for each of these when you create the blueprint.
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      # Set to your Cloudflare Pages URL after the frontend deploys, then redeploy.
+      - key: TRUSTED_ORIGINS
+        sync: false

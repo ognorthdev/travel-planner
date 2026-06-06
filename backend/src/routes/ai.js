@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { recordCost, calculatePlacesCost } = require('../costs');
+const { assertTripAccess } = require('../lib/access');
 
 // Conditionally load AI SDKs
 let anthropic = null;
@@ -242,6 +243,7 @@ router.post('/discover', async (req, res, next) => {
     if (!location || !slotType || !destination) {
       return res.status(400).json({ error: 'location, slotType, and destination are required' });
     }
+    if (tripId) await assertTripAccess(tripId, req.user.id);
 
     if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === 'your_google_maps_api_key_here') {
       return res.status(501).json({ error: 'Google Maps API key not configured' });

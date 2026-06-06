@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
+const { assertTripAccess } = require('../lib/access');
 
 const prisma = new PrismaClient();
 
@@ -19,6 +20,7 @@ const SERVICE_LABELS = {
 // GET /api/trips/:tripId/costs
 router.get('/:tripId/costs', async (req, res, next) => {
   try {
+    await assertTripAccess(req.params.tripId, req.user.id);
     const costs = await prisma.apiCost.findMany({
       where: { tripId: req.params.tripId },
     });

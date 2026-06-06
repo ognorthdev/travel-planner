@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, MapPin, Calendar, Plus, Settings, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Plus, Settings, Loader2, Users } from 'lucide-react';
 import CostBadge from './CostBadge';
 
 function parseLocalDate(dateStr) {
@@ -10,7 +10,7 @@ function parseLocalDate(dateStr) {
 // Shared trip header used by both the date view and the research view, so they stay
 // identical. `onBack` returns to the previous view (home from the date view; the date
 // view from research). The action buttons are optional.
-export default function TripHeader({ trip, tripId, onBack, onAddDay, addingDay, onOpenSettings }) {
+export default function TripHeader({ trip, tripId, onBack, onAddDay, addingDay, onOpenSettings, onShare }) {
   return (
     <header className="bg-slate-800 border-b border-slate-700 shadow-sm flex-shrink-0 z-10">
       <div className="max-w-full px-4 sm:px-6">
@@ -46,6 +46,15 @@ export default function TripHeader({ trip, tripId, onBack, onAddDay, addingDay, 
               <button onClick={onAddDay} disabled={addingDay} className="btn-primary">
                 {addingDay ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                 Add Day
+              </button>
+            )}
+            {onShare && (
+              <button
+                onClick={onShare}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 hover:text-slate-100 transition-colors text-sm font-medium"
+              >
+                <Users size={14} />
+                Share
               </button>
             )}
             {onOpenSettings && (

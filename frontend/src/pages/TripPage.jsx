@@ -10,6 +10,7 @@ import ResearchOverlay from '../components/research/ResearchOverlay';
 import SuggestionDetailModal from '../components/research/SuggestionDetailModal';
 import TripSettings from '../components/TripSettings.jsx';
 import TripHeader from '../components/TripHeader.jsx';
+import ShareModal from '../components/ShareModal.jsx';
 import SlotCard from '../components/SlotCard.jsx';
 import SLOT_CONFIG from '../config/slotTypes.js';
 
@@ -213,6 +214,7 @@ export default function TripPage() {
   const [savedIdeas, setSavedIdeas] = useState([]);
   const [selectedIdea, setSelectedIdea] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   useEffect(() => {
     loadTripData();
@@ -462,6 +464,7 @@ export default function TripPage() {
         onAddDay={handleAddDay}
         addingDay={addingDay}
         onOpenSettings={() => setShowSettings(true)}
+        onShare={() => setShowShare(true)}
       />
 
       {/* Horizontal Day Scroll */}
@@ -578,6 +581,10 @@ export default function TripPage() {
           onClose={() => setShowSettings(false)}
           onTripUpdated={(updated) => setTrip(prev => ({ ...prev, ...updated }))}
         />
+      )}
+
+      {showShare && (
+        <ShareModal tripId={tripId} onClose={() => setShowShare(false)} />
       )}
     </div>
   );
