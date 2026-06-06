@@ -1,0 +1,9 @@
+# Deploys the built Vite app as a static site on Cloudflare Workers (static assets).
+# Used by the Workers "Create application" / Git build flow: `npx wrangler deploy`.
+name = "travel-planner"
+compatibility_date = "2026-06-01"
+
+[assets]
+directory = "./dist"
+# Serve index.html for unknown routes so React Router deep links work.
+not_found_handling = "single-page-application"
