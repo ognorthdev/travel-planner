@@ -1,13 +1,13 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
+// Per-MTok rates in cents (300 = $3.00 per million tokens). Verified via web
+// search, June 2026.
 const PRICING = {
-  'claude-opus-4-7': { inputPerMTok: 1500, outputPerMTok: 7500 },
-  'claude-sonnet-4-6': { inputPerMTok: 300, outputPerMTok: 1500 },
-  'gemini-3.5-flash': { inputPerMTok: 150, outputPerMTok: 900 },
-  // NOTE: placeholder pricing — confirm the real Gemini 3 Flash per-MTok rates.
-  // Values are in cents per million tokens (e.g. 150 = $1.50/MTok).
-  'gemini-3-flash-preview': { inputPerMTok: 30, outputPerMTok: 250 },
+  'claude-opus-4-7': { inputPerMTok: 500, outputPerMTok: 2500 },     // $5.00 / $25.00
+  'claude-sonnet-4-6': { inputPerMTok: 300, outputPerMTok: 1500 },   // $3.00 / $15.00
+  'gemini-3.5-flash': { inputPerMTok: 150, outputPerMTok: 900 },     // $1.50 / $9.00
+  'gemini-3-flash-preview': { inputPerMTok: 50, outputPerMTok: 300 },// $0.50 / $3.00
 };
 
 const PLACES_PRICING = {
