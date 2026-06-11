@@ -4,7 +4,7 @@ import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import { researchApi, streamResearch } from '../../api/index.js';
 
-export default function ResearchChat({ tripId, destination, onSuggestion, mealPreferences, activityPreferences }) {
+export default function ResearchChat({ tripId, destination, onSuggestion, mealPreferences, activityPreferences, tripContext }) {
   const [messages, setMessages] = useState([]);
   const [mode, setMode] = useState('web');
   const [streaming, setStreaming] = useState(false);
@@ -58,6 +58,7 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
         destination,
         mealPreferences,
         activityPreferences,
+        tripContext,
         signal: controller.signal,
       });
 
@@ -122,7 +123,7 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
     setStreaming(false);
     setStatus(null);
     abortRef.current = null;
-  }, [streaming, messages, mode, tripId, destination, onSuggestion]);
+  }, [streaming, messages, mode, tripId, destination, onSuggestion, mealPreferences, activityPreferences, tripContext]);
 
   const handleReextract = useCallback(async (message) => {
     if (!message?.content?.trim()) return;

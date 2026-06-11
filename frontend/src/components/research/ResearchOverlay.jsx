@@ -5,7 +5,7 @@ import SuggestionDetailModal from './SuggestionDetailModal';
 import TripHeader from '../TripHeader.jsx';
 import { researchApi } from '../../api/index.js';
 
-export default function ResearchOverlay({ trip, tripId, destination, onClose, onAddDay, addingDay, onOpenSettings, savedIdeas, onIdeasChange, mealPreferences, activityPreferences }) {
+export default function ResearchOverlay({ trip, tripId, destination, onClose, onAddDay, addingDay, onOpenSettings, savedIdeas, onIdeasChange, mealPreferences, activityPreferences, tripContext }) {
   const [suggestions, setSuggestions] = useState([]);
   const [savedNames, setSavedNames] = useState(
     () => new Set(savedIdeas.map(i => i.name))
@@ -100,6 +100,7 @@ export default function ResearchOverlay({ trip, tripId, destination, onClose, on
             onSuggestion={handleSuggestion}
             mealPreferences={mealPreferences}
             activityPreferences={activityPreferences}
+            tripContext={tripContext}
           />
         </div>
 

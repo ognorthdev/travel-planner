@@ -11,6 +11,7 @@ const researchRouter = require('./routes/research');
 const costsRouter = require('./routes/costs');
 const adminRouter = require('./routes/admin');
 const { requireAuth, requireApproved, requireAdmin } = require('./middleware/requireAuth');
+const { prisma } = require('./lib/access');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,7 +37,31 @@ app.get('/health', (req, res) => {
 // Current user's account status (reachable while pending, so the UI can show
 // the awaiting-approval screen). Must be registered before the broad mounts.
 app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ email: req.user.email, status: req.user.status, isAdmin: req.user.isAdmin });
+  res.json({
+    email: req.user.email,
+    status: req.user.status,
+    isAdmin: req.user.isAdmin,
+    researchContext: req.user.researchContext || '',
+  });
+});
+
+// Update the current user's account-level preferences (research context).
+app.put('/api/me', requireAuth, async (req, res, next) => {
+  try {
+    const { researchContext } = req.body;
+    const updated = await prisma.appUser.update({
+      where: { userId: req.user.id },
+      data: { ...(researchContext !== undefined && { researchContext }) },
+    });
+    res.json({
+      email: updated.email,
+      status: updated.status,
+      isAdmin: updated.isAdmin,
+      researchContext: updated.researchContext || '',
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // Admin (manage user approvals).

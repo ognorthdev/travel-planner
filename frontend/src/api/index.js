@@ -51,9 +51,10 @@ export const membersApi = {
   remove: (tripId, memberId) => api.delete(`/trips/${tripId}/members/${memberId}`),
 };
 
-// Current user's account status
+// Current user's account status + preferences
 export const meApi = {
   get: () => api.get('/me'),
+  update: (data) => api.put('/me', data),
 };
 
 // Admin (approve users)

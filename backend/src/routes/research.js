@@ -430,7 +430,7 @@ router.post('/:tripId/extract', async (req, res, next) => {
 
 // POST /api/research/:tripId/stream — SSE streaming endpoint
 router.post('/:tripId/stream', async (req, res) => {
-  const { query, mode, messages, destination, mealPreferences, activityPreferences } = req.body;
+  const { query, mode, messages, destination, mealPreferences, activityPreferences, tripContext } = req.body;
   if (!query || !destination) {
     return res.status(400).json({ error: 'query and destination are required' });
   }
@@ -456,7 +456,7 @@ router.post('/:tripId/stream', async (req, res) => {
   try {
     const config = await getModelConfig(tripId);
     if (mode === 'web') {
-      await handleWebResearch(res, query, messages, destination, () => closed, tripId, { mealPreferences, activityPreferences }, config.extraction, config.webResearch);
+      await handleWebResearch(res, query, messages, destination, () => closed, tripId, { mealPreferences, activityPreferences, tripContext, userContext: req.user.researchContext }, config.extraction, config.webResearch);
     } else if (mode === 'maps') {
       await handleMapsResearch(res, query, messages, destination, () => closed, tripId, config.mapsResearch, config.extraction);
     } else {
@@ -545,6 +545,12 @@ async function handleWebResearch(res, query, messages, destination, isClosed, tr
     : '';
 
   const preferencesSection = [];
+  if (preferences.userContext) {
+    preferencesSection.push(`Traveler context (applies to all their trips): ${preferences.userContext}`);
+  }
+  if (preferences.tripContext) {
+    preferencesSection.push(`Trip context: ${preferences.tripContext}`);
+  }
   if (preferences.mealPreferences) {
     preferencesSection.push(`Meal preferences: ${preferences.mealPreferences}`);
   }

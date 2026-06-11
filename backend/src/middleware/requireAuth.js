@@ -69,6 +69,7 @@ async function requireAuth(req, res, next) {
       email: appUser.email,
       status: appUser.status,
       isAdmin: appUser.isAdmin,
+      researchContext: appUser.researchContext,
     };
     req.accessToken = token;
     next();

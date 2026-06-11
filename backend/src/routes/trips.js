@@ -147,7 +147,7 @@ router.get('/:id', async (req, res, next) => {
 // PUT /api/trips/:id - Update a trip
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, destination, startDate, endDate, coverImageUrl, mealPreferences, activityPreferences, modelConfig } = req.body;
+    const { name, destination, startDate, endDate, coverImageUrl, mealPreferences, activityPreferences, researchContext, modelConfig } = req.body;
 
     // any collaborator may edit trip details
     await assertTripAccess(req.params.id, req.user.id);
@@ -162,6 +162,7 @@ router.put('/:id', async (req, res, next) => {
         ...(coverImageUrl !== undefined && { coverImageUrl }),
         ...(mealPreferences !== undefined && { mealPreferences }),
         ...(activityPreferences !== undefined && { activityPreferences }),
+        ...(researchContext !== undefined && { researchContext }),
         ...(modelConfig !== undefined && { modelConfig: typeof modelConfig === 'string' ? modelConfig : JSON.stringify(modelConfig) }),
       }
     });

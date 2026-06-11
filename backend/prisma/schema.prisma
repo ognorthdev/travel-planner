@@ -16,6 +16,7 @@ model Trip {
   coverImageUrl        String?
   mealPreferences      String?
   activityPreferences  String?
+  researchContext      String?
   modelConfig          String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -53,10 +54,12 @@ model TripMember {
 // flag. Created on a user's first authenticated request.
 model AppUser {
   id        String   @id @default(cuid())
-  userId    String   @unique // Supabase Auth user id
-  email     String
-  status    String   @default("pending") // pending | approved
-  isAdmin   Boolean  @default(false)
+  userId          String   @unique // Supabase Auth user id
+  email           String
+  status          String   @default("pending") // pending | approved
+  isAdmin         Boolean  @default(false)
+  // Account-level research preferences, applied to research across all trips.
+  researchContext String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

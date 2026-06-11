@@ -59,6 +59,7 @@ export default function TripSettings({ trip, onClose, onTripUpdated }) {
   const [destination, setDestination] = useState(trip.destination);
   const [startDate, setStartDate] = useState(trip.startDate.slice(0, 10));
   const [endDate, setEndDate] = useState(trip.endDate.slice(0, 10));
+  const [researchContext, setResearchContext] = useState(trip.researchContext || '');
   const [mealPreferences, setMealPreferences] = useState(trip.mealPreferences || '');
   const [activityPreferences, setActivityPreferences] = useState(trip.activityPreferences || '');
   const [modelConfig, setModelConfig] = useState(() => parseModelConfig(trip.modelConfig));
@@ -76,6 +77,10 @@ export default function TripSettings({ trip, onClose, onTripUpdated }) {
   useAutosave(trip.id, 'destination', destination, () => {
     onTripUpdated({ ...trip, destination });
     showSaved('destination');
+  });
+  useAutosave(trip.id, 'researchContext', researchContext, () => {
+    onTripUpdated({ ...trip, researchContext });
+    showSaved('context');
   });
   useAutosave(trip.id, 'mealPreferences', mealPreferences, () => {
     onTripUpdated({ ...trip, mealPreferences });
@@ -173,6 +178,24 @@ export default function TripSettings({ trip, onClose, onTripUpdated }) {
                 className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 focus:outline-none focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500/30 [color-scheme:dark]"
               />
             </div>
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="text-sm font-medium text-slate-300">Trip Context</label>
+              <SavedIndicator visible={savedField === 'context'} />
+            </div>
+            <p className="text-xs text-slate-500 mb-2">
+              Context specific to this trip — the occasion, who's coming, must-dos, or anything to keep in mind when
+              researching ideas. This is added on top of your account-level research context in Settings.
+            </p>
+            <textarea
+              value={researchContext}
+              onChange={(e) => setResearchContext(e.target.value)}
+              placeholder="e.g. Celebrating a 10th anniversary. Staying near the old town. Want one special tasting-menu dinner and a relaxed pace."
+              rows={3}
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500/30"
+            />
           </div>
 
           <div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, MapPin, Calendar, Plane, X, Loader2, Globe, LogOut, Shield } from 'lucide-react';
+import { Plus, MapPin, Calendar, Plane, X, Loader2, Globe, LogOut, Shield, Settings } from 'lucide-react';
 import { tripsApi } from '../api/index.js';
 import { InlineCost } from '../components/CostBadge';
 import { useAuth } from '../lib/auth.jsx';
@@ -297,6 +297,14 @@ export default function HomePage() {
                   Admin
                 </button>
               )}
+              <button
+                onClick={() => navigate('/settings')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 hover:text-slate-100 transition-colors text-sm font-medium"
+                title="Settings"
+              >
+                <Settings size={14} />
+                Settings
+              </button>
               <button
                 onClick={() => signOut()}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 hover:text-slate-100 transition-colors text-sm font-medium"

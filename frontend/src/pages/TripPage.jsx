@@ -572,6 +572,7 @@ export default function TripPage() {
           onIdeasChange={setSavedIdeas}
           mealPreferences={trip.mealPreferences}
           activityPreferences={trip.activityPreferences}
+          tripContext={trip.researchContext}
         />
       )}
 
