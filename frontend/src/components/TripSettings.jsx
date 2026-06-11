@@ -6,22 +6,23 @@ import { tripsApi } from '../api/index.js';
 const MODELS = [
   { key: 'claude-sonnet', label: 'Claude Sonnet 4.6', short: 'Sonnet 4.6' },
   { key: 'gemini-flash', label: 'Gemini Flash 3.5', short: 'Gemini 3.5' },
+  { key: 'gemini-flash-3', label: 'Gemini Flash 3', short: 'Gemini 3' },
   { key: 'google-places', label: 'Google Places API', short: 'Places' },
 ];
 
 // Rows of the model grid. `valid` lists which models can actually perform each behaviour.
 const BEHAVIOURS = [
-  { key: 'webResearch', label: 'Web Research', desc: 'Discover new activity/meal ideas', valid: ['claude-sonnet', 'gemini-flash'] },
-  { key: 'mapsResearch', label: 'Maps Research', desc: 'Lookup places you know', valid: ['claude-sonnet', 'gemini-flash'] },
-  { key: 'questions', label: 'Questions', desc: 'Ask questions about your trip', valid: ['claude-sonnet', 'gemini-flash'] },
-  { key: 'extraction', label: 'Idea Card Extraction', desc: 'Turn chat replies into idea cards', valid: ['claude-sonnet', 'gemini-flash'] },
+  { key: 'webResearch', label: 'Web Research', desc: 'Discover new activity/meal ideas', valid: ['claude-sonnet', 'gemini-flash', 'gemini-flash-3'] },
+  { key: 'mapsResearch', label: 'Maps Research', desc: 'Lookup places you know', valid: ['claude-sonnet', 'gemini-flash', 'gemini-flash-3'] },
+  { key: 'ideaScraper', label: 'Idea Scraper', desc: 'Pull trip ideas from a URL', valid: ['claude-sonnet', 'gemini-flash', 'gemini-flash-3'] },
+  { key: 'extraction', label: 'Idea Card Extraction', desc: 'Turn chat replies into idea cards', valid: ['claude-sonnet', 'gemini-flash', 'gemini-flash-3'] },
   { key: 'enrichment', label: 'Place Enrichment', desc: 'Photos, ratings & addresses', valid: ['google-places'] },
 ];
 
 const DEFAULT_MODEL_CONFIG = {
   webResearch: 'claude-sonnet',
   mapsResearch: 'gemini-flash',
-  questions: 'gemini-flash',
+  ideaScraper: 'claude-sonnet',
   extraction: 'gemini-flash',
   enrichment: 'google-places',
 };
@@ -242,7 +243,7 @@ export default function TripSettings({ trip, onClose, onTripUpdated }) {
             </p>
             <div className="rounded-xl border border-slate-700 overflow-hidden">
               {/* Header row */}
-              <div className="grid" style={{ gridTemplateColumns: '1.5fr repeat(3, 1fr)' }}>
+              <div className="grid" style={{ gridTemplateColumns: `1.5fr repeat(${MODELS.length}, 1fr)` }}>
                 <div className="bg-slate-800/60 px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Behaviour</div>
                 {MODELS.map(m => (
                   <div key={m.key} title={m.label} className="bg-slate-800/60 px-2 py-2 text-center text-[11px] font-semibold text-slate-300 border-l border-slate-700">
@@ -254,7 +255,7 @@ export default function TripSettings({ trip, onClose, onTripUpdated }) {
               {BEHAVIOURS.map(b => {
                 const locked = b.valid.length === 1;
                 return (
-                  <div key={b.key} className="grid items-center border-t border-slate-700" style={{ gridTemplateColumns: '1.5fr repeat(3, 1fr)' }}>
+                  <div key={b.key} className="grid items-center border-t border-slate-700" style={{ gridTemplateColumns: `1.5fr repeat(${MODELS.length}, 1fr)` }}>
                     <div className="px-3 py-2.5">
                       <p className="text-sm font-medium text-slate-200">{b.label}</p>
                       <p className="text-[11px] text-slate-500 leading-tight">{b.desc}</p>

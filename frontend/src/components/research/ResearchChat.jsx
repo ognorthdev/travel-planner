@@ -13,6 +13,10 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
   const [summaryLoaded, setSummaryLoaded] = useState(false);
   const messagesEndRef = useRef(null);
   const abortRef = useRef(null);
+  // Whether this session has already submitted a web-research question. The
+  // preferences/context are injected only on the first one (see handleSend) so
+  // we don't re-send — and re-bill — the context on every later question.
+  const webContextSentRef = useRef(false);
 
   useEffect(() => {
     if (summaryLoaded) return;
@@ -46,6 +50,12 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // Inject the preferences/context only on the first web-research question of
+    // the session, prepended ahead of that question. Subsequent questions skip
+    // it to avoid re-submitting (and paying for) the same context.
+    const injectContext = mode === 'web' && !webContextSentRef.current;
+    if (injectContext) webContextSentRef.current = true;
+
     try {
       const chatHistory = messages
         .filter(m => m.id !== 'summary')
@@ -59,6 +69,7 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
         mealPreferences,
         activityPreferences,
         tripContext,
+        injectContext,
         signal: controller.signal,
       });
 
@@ -154,7 +165,7 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
               Plan your trip to {destination}.
               Use <span className="text-violet-400">Web Research</span> to discover new activity/meal ideas,{' '}
               <span className="text-emerald-400">Maps Research</span> to lookup places you know,{' '}
-              or <span className="text-ocean-400">Questions</span> to ask questions about your trip.
+              or <span className="text-ocean-400">Idea Scraper</span> to pull ideas from a webpage URL.
             </p>
           </div>
         )}
@@ -164,7 +175,7 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
         {streaming && status === 'researching' && (
           <div className="flex items-center gap-2 px-4 py-2 text-xs text-violet-400">
             <Loader2 size={12} className="animate-spin" />
-            {mode === 'web' ? 'Searching the web...' : mode === 'maps' ? 'Searching maps...' : 'Thinking...'}
+            {mode === 'web' ? 'Searching the web...' : mode === 'maps' ? 'Searching maps...' : 'Reading the page...'}
           </div>
         )}
         {streaming && status === 'retrying' && (

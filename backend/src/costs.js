@@ -5,6 +5,9 @@ const PRICING = {
   'claude-opus-4-7': { inputPerMTok: 1500, outputPerMTok: 7500 },
   'claude-sonnet-4-6': { inputPerMTok: 300, outputPerMTok: 1500 },
   'gemini-3.5-flash': { inputPerMTok: 150, outputPerMTok: 900 },
+  // NOTE: placeholder pricing — confirm the real Gemini 3 Flash per-MTok rates.
+  // Values are in cents per million tokens (e.g. 150 = $1.50/MTok).
+  'gemini-3-flash-preview': { inputPerMTok: 30, outputPerMTok: 250 },
 };
 
 const PLACES_PRICING = {

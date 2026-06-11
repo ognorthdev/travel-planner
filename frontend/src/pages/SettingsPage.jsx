@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Lock, Sparkles, Check, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -38,38 +38,55 @@ export default function SettingsPage() {
 
 function ResearchContextSection({ profile, refreshProfile }) {
   const [value, setValue] = useState(profile?.researchContext || '');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [status, setStatus] = useState('idle'); // idle | saving | saved
   const [error, setError] = useState('');
+  const timerRef = useRef(null);
+  const lastSavedRef = useRef(profile?.researchContext || '');
 
-  const dirty = value !== (profile?.researchContext || '');
-
-  const handleSave = async () => {
-    setSaving(true);
-    setError('');
-    setSaved(false);
-    try {
-      await meApi.update({ researchContext: value });
-      await refreshProfile();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } catch (err) {
-      setError(err.message || 'Failed to save');
-    } finally {
-      setSaving(false);
-    }
-  };
+  // Debounced autosave — mirrors the per-trip settings behaviour (2s after the
+  // last keystroke).
+  useEffect(() => {
+    if (value === lastSavedRef.current) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(async () => {
+      setStatus('saving');
+      setError('');
+      try {
+        await meApi.update({ researchContext: value });
+        lastSavedRef.current = value;
+        await refreshProfile();
+        setStatus('saved');
+        setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 2000);
+      } catch (err) {
+        setStatus('idle');
+        setError(err.message || 'Failed to save');
+      }
+    }, 2000);
+    return () => clearTimeout(timerRef.current);
+  }, [value, refreshProfile]);
 
   return (
     <section>
       <div className="flex items-center gap-2 mb-2">
         <Sparkles size={16} className="text-ocean-400" />
         <h3 className="text-base font-semibold text-slate-100">Research Context</h3>
+        {status === 'saving' && (
+          <span className="flex items-center gap-1 text-xs text-slate-400">
+            <Loader2 size={12} className="animate-spin" />
+            Saving…
+          </span>
+        )}
+        {status === 'saved' && (
+          <span className="flex items-center gap-1 text-xs text-emerald-400 animate-fade-in">
+            <Check size={12} />
+            Saved
+          </span>
+        )}
       </div>
       <p className="text-xs text-slate-500 mb-3">
         Preferences and context applied to <span className="text-slate-300">every</span> trip when researching
         ideas — travel style, dietary needs, budget, who you usually travel with, things to avoid. Individual trips
-        can add their own context in Trip Settings.
+        can add their own context in Trip Settings. Changes save automatically.
       </p>
       <textarea
         value={value}
@@ -79,22 +96,6 @@ function ResearchContextSection({ profile, refreshProfile }) {
         className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-ocean-500 focus:ring-1 focus:ring-ocean-500/30"
       />
       {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-      <div className="flex items-center gap-3 mt-3">
-        <button
-          onClick={handleSave}
-          disabled={saving || !dirty}
-          className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-          Save
-        </button>
-        {saved && (
-          <span className="flex items-center gap-1 text-sm text-emerald-400 animate-fade-in">
-            <Check size={14} />
-            Saved
-          </span>
-        )}
-      </div>
     </section>
   );
 }

@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Globe, Map, MessageCircle } from 'lucide-react';
+import { Send, Globe, Map, Link2 } from 'lucide-react';
 
 const MODES = [
   { key: 'web', label: 'Web Research', icon: Globe, activeClass: 'text-violet-400 bg-violet-500/20 border border-violet-500/40' },
   { key: 'maps', label: 'Maps Research', icon: Map, activeClass: 'text-emerald-400 bg-emerald-500/20 border border-emerald-500/40' },
-  { key: 'flash', label: 'Questions', icon: MessageCircle, activeClass: 'text-ocean-400 bg-ocean-500/20 border border-ocean-500/40' },
+  { key: 'scraper', label: 'Idea Scraper', icon: Link2, activeClass: 'text-ocean-400 bg-ocean-500/20 border border-ocean-500/40' },
 ];
 
 export default function ChatInput({ onSend, disabled, mode, onModeChange }) {
@@ -65,7 +65,7 @@ export default function ChatInput({ onSend, disabled, mode, onModeChange }) {
           placeholder={
             mode === 'web' ? 'Discover new activity/meal ideas...' :
             mode === 'maps' ? 'Lookup places you know...' :
-            'Ask questions about your trip...'
+            'Paste a URL to pull trip ideas from (https://...)'
           }
           disabled={disabled}
           rows={1}
