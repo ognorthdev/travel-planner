@@ -628,7 +628,12 @@ export default function TripPage() {
       )}
 
       {showShare && (
-        <ShareModal tripId={tripId} onClose={() => setShowShare(false)} />
+        <ShareModal
+          tripId={tripId}
+          trip={trip}
+          onTripUpdated={(updated) => setTrip(prev => ({ ...prev, ...updated }))}
+          onClose={() => setShowShare(false)}
+        />
       )}
     </div>
   );

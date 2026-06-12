@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Users, X, Trash2, Loader2 } from 'lucide-react';
-import { membersApi } from '../api/index.js';
+import { Users, X, Trash2, Loader2, Link2, Copy, Check, RefreshCw } from 'lucide-react';
+import { membersApi, tripsApi } from '../api/index.js';
 
 const ROLE_LABELS = {
   OWNER: 'Owner',
@@ -8,7 +8,7 @@ const ROLE_LABELS = {
   VIEWER: 'Can view',
 };
 
-export default function ShareModal({ tripId, onClose }) {
+export default function ShareModal({ tripId, trip, onTripUpdated, onClose }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
@@ -16,6 +16,11 @@ export default function ShareModal({ tripId, onClose }) {
   const [inviting, setInviting] = useState(false);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const shareToken = trip?.shareToken;
+  const shareUrl = shareToken ? `${window.location.origin}/share/${shareToken}` : null;
 
   const isOwner = members.find((m) => m.isYou)?.role === 'OWNER';
 
@@ -41,14 +46,52 @@ export default function ShareModal({ tripId, onClose }) {
     setInfo(null);
     setInviting(true);
     try {
-      await membersApi.invite(tripId, email.trim(), role);
-      setInfo(`${email.trim()} can now collaborate on this trip.`);
+      const result = await membersApi.invite(tripId, email.trim(), role);
+      setInfo(result.emailSent
+        ? `Invitation email sent to ${email.trim()}.`
+        : `${email.trim()} can now collaborate on this trip — let them know to sign in with this email.`);
       setEmail('');
       await load();
     } catch (err) {
       setError(err.message || 'Could not add that person');
     } finally {
       setInviting(false);
+    }
+  };
+
+  const handleEnableShare = async () => {
+    setShareBusy(true);
+    setError(null);
+    try {
+      const { shareToken: token } = await tripsApi.enableShare(tripId);
+      onTripUpdated?.({ shareToken: token });
+    } catch (err) {
+      setError(err.message || 'Could not create the link');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const handleDisableShare = async () => {
+    setShareBusy(true);
+    setError(null);
+    try {
+      await tripsApi.disableShare(tripId);
+      onTripUpdated?.({ shareToken: null });
+    } catch (err) {
+      setError(err.message || 'Could not disable the link');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError('Could not copy — select the link text manually');
     }
   };
 
@@ -102,7 +145,7 @@ export default function ShareModal({ tripId, onClose }) {
               {inviting ? <Loader2 size={16} className="animate-spin" /> : <Users size={16} />}
               Invite
             </button>
-            <p className="text-xs text-slate-500">They need a Travel Planner account with this email first.</p>
+            <p className="text-xs text-slate-500">If they don't have an account yet, the invite is claimed automatically when they sign up with this email.</p>
           </form>
         )}
 
@@ -111,6 +154,63 @@ export default function ShareModal({ tripId, onClose }) {
         )}
         {info && (
           <div className="text-sm text-emerald-400 bg-emerald-950/40 border border-emerald-900 rounded-lg px-3 py-2 mb-3">{info}</div>
+        )}
+
+        {isOwner && (
+          <div className="mb-5 border border-slate-700 rounded-xl p-3 bg-slate-900/40">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <Link2 size={15} className="text-teal-400" />
+                <p className="text-sm font-semibold text-slate-200">Public link</p>
+              </div>
+              {shareToken ? (
+                <button
+                  onClick={handleDisableShare}
+                  disabled={shareBusy}
+                  className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                >
+                  Disable
+                </button>
+              ) : (
+                <button
+                  onClick={handleEnableShare}
+                  disabled={shareBusy}
+                  className="text-xs text-teal-400 hover:text-teal-300 transition-colors font-medium"
+                >
+                  {shareBusy ? 'Creating…' : 'Create link'}
+                </button>
+              )}
+            </div>
+            {shareToken ? (
+              <div className="flex items-center gap-1.5 mt-2">
+                <input
+                  readOnly
+                  value={shareUrl}
+                  onFocus={(e) => e.target.select()}
+                  className="flex-1 min-w-0 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 px-2.5 py-1.5 text-xs focus:outline-none"
+                />
+                <button
+                  onClick={handleCopy}
+                  className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                  title="Copy link"
+                >
+                  {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                </button>
+                <button
+                  onClick={handleEnableShare}
+                  disabled={shareBusy}
+                  className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                  title="Rotate link (old link stops working)"
+                >
+                  <RefreshCw size={14} className={shareBusy ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Anyone with the link can view the itinerary — no account needed. Read-only.
+              </p>
+            )}
+          </div>
         )}
 
         <div className="space-y-2">
