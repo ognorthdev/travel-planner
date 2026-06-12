@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import SharedTripPage from './pages/SharedTripPage.jsx';
+import PrintPage from './pages/PrintPage.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { AuthProvider } from './lib/auth.jsx';
 
@@ -21,6 +22,7 @@ function App() {
           <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
           <Route path="/trips/:tripId" element={<ProtectedRoute><TripPage /></ProtectedRoute>} />
+          <Route path="/trips/:tripId/print" element={<ProtectedRoute><PrintPage /></ProtectedRoute>} />
           <Route
             path="/trips/:tripId/days/:dayId/slots/:slotId"
             element={<ProtectedRoute><PlanningPage /></ProtectedRoute>}

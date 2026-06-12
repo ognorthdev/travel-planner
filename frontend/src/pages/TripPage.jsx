@@ -495,6 +495,7 @@ export default function TripPage() {
         addingDay={addingDay}
         onOpenSettings={() => setShowSettings(true)}
         onShare={() => setShowShare(true)}
+        onPrint={() => navigate(`/trips/${tripId}/print`)}
       />
 
       {/* Horizontal Day Scroll */}
