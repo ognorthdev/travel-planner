@@ -206,6 +206,8 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
                     <img
                       src={photo.url}
                       alt={`${suggestion.name} - ${labels[pi] || 'Photo'}`}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
                     />

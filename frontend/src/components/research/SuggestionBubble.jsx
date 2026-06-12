@@ -94,6 +94,8 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
           <img
             src={bannerPhoto.url}
             alt={suggestion.name}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
           />
@@ -189,6 +191,8 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
                   <img
                     src={photo.url}
                     alt={`${suggestion.name} photo ${pi + 2}`}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
                   />

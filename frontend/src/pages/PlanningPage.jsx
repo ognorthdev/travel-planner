@@ -235,7 +235,7 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
             <div className="grid grid-cols-2 gap-2">
               {photos.slice(0, 4).map((photo, pi) => (
                 <div key={pi} className="relative h-32 rounded-xl overflow-hidden bg-slate-700/50">
-                  <img src={photo.url} alt={`${name} - ${photoLabels[pi]}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={photo.url} alt={`${name} - ${photoLabels[pi]}`} loading="lazy" decoding="async" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   <span className="absolute bottom-1 left-1 text-[10px] font-medium bg-black/60 text-white px-1.5 py-0.5 rounded">{photoLabels[pi]}</span>
                 </div>
               ))}

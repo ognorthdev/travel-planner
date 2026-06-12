@@ -68,7 +68,7 @@ export default function SlotCard({ slot, dayId, tripId, onDelete, index, isDragg
       >
         {/* Clip the photo here (not on the card) so the delete X can overhang the corner. */}
         <div className="relative h-20 rounded-[11px] overflow-hidden">
-          <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          <img src={thumbnailUrl} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-transparent" />
           <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
             <span className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-slate-950/60 backdrop-blur-sm ${config.color}`}>
@@ -131,7 +131,7 @@ export default function SlotCard({ slot, dayId, tripId, onDelete, index, isDragg
         </div>
         {thumbnailUrl ? (
           <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0 shadow-sm">
-            <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            <img src={thumbnailUrl} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
         ) : (
           <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-700 shadow-sm flex-shrink-0">
