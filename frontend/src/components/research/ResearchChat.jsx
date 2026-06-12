@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import { researchApi, streamResearch } from '../../api/index.js';
@@ -18,19 +18,38 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
   // we don't re-send — and re-bill — the context on every later question.
   const webContextSentRef = useRef(false);
 
+  // Restore the persisted conversation; fall back to the condensed summary
+  // for trips that predate message persistence.
   useEffect(() => {
     if (summaryLoaded) return;
     setSummaryLoaded(true);
-    researchApi.getSummary(tripId).then(summary => {
-      if (summary?.summary) {
-        setMessages([{
-          id: 'summary',
-          role: 'assistant',
-          content: `Here's what we discussed last time:\n\n${summary.summary}`,
-        }]);
+    researchApi.getMessages(tripId).then(history => {
+      if (history?.length > 0) {
+        setMessages(history.map(m => ({ id: m.id, role: m.role, content: m.content })));
+        return;
       }
+      return researchApi.getSummary(tripId).then(summary => {
+        if (summary?.summary) {
+          setMessages([{
+            id: 'summary',
+            role: 'assistant',
+            content: `Here's what we discussed last time:\n\n${summary.summary}`,
+          }]);
+        }
+      });
     }).catch(() => {});
   }, [tripId, summaryLoaded]);
+
+  const handleClearChat = useCallback(async () => {
+    if (streaming) return;
+    setMessages([]);
+    webContextSentRef.current = false;
+    try {
+      await researchApi.clearMessages(tripId);
+    } catch (err) {
+      console.error('Failed to clear chat history:', err);
+    }
+  }, [tripId, streaming]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -56,6 +75,10 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
     const injectContext = mode === 'web' && !webContextSentRef.current;
     if (injectContext) webContextSentRef.current = true;
 
+    // Accumulated locally (in addition to state) so we can persist the
+    // finished exchange without re-reading state.
+    let assistantText = '';
+
     try {
       const chatHistory = messages
         .filter(m => m.id !== 'summary')
@@ -77,6 +100,7 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
         if (controller.signal.aborted) break;
 
         if (event === 'text') {
+          assistantText += data.content;
           setMessages(prev => {
             const updated = [...prev];
             const last = updated[updated.length - 1];
@@ -134,6 +158,15 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
     setStreaming(false);
     setStatus(null);
     abortRef.current = null;
+
+    // Persist the completed exchange (skip failed/empty responses) so the
+    // conversation survives reloads and is visible to collaborators.
+    if (assistantText.trim()) {
+      researchApi.saveMessages(tripId, [
+        { role: 'user', content: text, mode },
+        { role: 'assistant', content: assistantText, mode },
+      ]).catch(err => console.error('Failed to save chat messages:', err));
+    }
   }, [streaming, messages, mode, tripId, destination, onSuggestion, mealPreferences, activityPreferences, tripContext]);
 
   const handleReextract = useCallback(async (message) => {
@@ -157,6 +190,19 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.length > 0 && (
+          <div className="flex justify-end -mb-2">
+            <button
+              onClick={handleClearChat}
+              disabled={streaming}
+              className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-red-400 transition-colors disabled:opacity-40"
+              title="Clear this trip's chat history"
+            >
+              <Trash2 size={11} />
+              Clear chat
+            </button>
+          </div>
+        )}
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">
             <div className="text-4xl mb-3">🧭</div>

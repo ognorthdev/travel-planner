@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GripVertical, ChevronRight, Clock, X } from 'lucide-react';
+import { GripVertical, ChevronRight, Clock, X, CheckCircle2, CircleAlert } from 'lucide-react';
 import SLOT_CONFIG from '../config/slotTypes.js';
 import { formatTime12 } from '../utils/time.js';
 
@@ -87,6 +87,18 @@ export default function SlotCard({ slot, dayId, tripId, onDelete, index, isDragg
               <span className="flex items-center gap-0.5 text-[10px] text-slate-400 whitespace-nowrap">
                 <Clock size={9} />
                 {formatTime12(time)}
+              </span>
+            )}
+            {slot.data?.bookingStatus === 'booked' && (
+              <span className="flex items-center gap-0.5 text-[10px] text-emerald-400 whitespace-nowrap" title={slot.data?.confirmationNumber ? `Booked · ${slot.data.confirmationNumber}` : 'Booked'}>
+                <CheckCircle2 size={9} />
+                Booked
+              </span>
+            )}
+            {slot.data?.bookingStatus === 'needs-booking' && (
+              <span className="flex items-center gap-0.5 text-[10px] text-amber-400 whitespace-nowrap" title="Needs booking">
+                <CircleAlert size={9} />
+                To book
               </span>
             )}
           </div>

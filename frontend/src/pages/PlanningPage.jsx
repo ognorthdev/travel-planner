@@ -5,7 +5,7 @@ import {
   Sun, MapPin, Clock, FileText, Phone, Hash, Check,
   Star, Heart, Ticket,
   Bus, Footprints, Car, Lightbulb, ThumbsDown,
-  ExternalLink, Copy, RefreshCw
+  ExternalLink, Copy, RefreshCw, BookmarkCheck
 } from 'lucide-react';
 import { slotsApi, tripsApi, placesApi } from '../api/index.js';
 import CostBadge from '../components/CostBadge';
@@ -39,7 +39,10 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
   const [saved, setSaved] = useState(formData.saved || false);
   const [notes, setNotes] = useState(formData.notes || '');
   const [time, setTime] = useState(formData.time || '');
+  const [bookingStatus, setBookingStatus] = useState(formData.bookingStatus || 'none');
+  const [confirmationNumber, setConfirmationNumber] = useState(formData.confirmationNumber || '');
   const notesTimer = useRef(null);
+  const confTimer = useRef(null);
 
   const fetchEnrichment = (force = false) => {
     if (!name) return;
@@ -75,6 +78,19 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
     setTime(value);
     // Include the latest local notes so an unsaved note isn't clobbered.
     onFormDataChange({ ...formData, time: value, notes });
+  };
+
+  const handleBookingStatusChange = (status) => {
+    setBookingStatus(status);
+    onFormDataChange({ ...formData, bookingStatus: status, confirmationNumber, notes, time });
+  };
+
+  const handleConfirmationChange = (value) => {
+    setConfirmationNumber(value);
+    if (confTimer.current) clearTimeout(confTimer.current);
+    confTimer.current = setTimeout(() => {
+      onFormDataChange({ ...formData, confirmationNumber: value, bookingStatus, notes, time });
+    }, 800);
   };
 
   if (!name) {
@@ -300,6 +316,26 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
             )}
           </div>
 
+          {/* Booking */}
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 space-y-3">
+            <BookingStatusField value={bookingStatus} onChange={handleBookingStatusChange} />
+            {bookingStatus === 'booked' && (
+              <div>
+                <label className="label flex items-center gap-1.5">
+                  <Hash size={13} className="text-slate-400" />
+                  Confirmation #
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  value={confirmationNumber}
+                  onChange={e => handleConfirmationChange(e.target.value)}
+                  placeholder="e.g. RES-48213"
+                />
+              </div>
+            )}
+          </div>
+
           {/* Notes */}
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
             <label className="label flex items-center gap-1.5 mb-2">
@@ -316,6 +352,38 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const BOOKING_OPTIONS = [
+  { value: 'none', label: 'No booking', activeClass: 'bg-slate-600 text-slate-200' },
+  { value: 'needs-booking', label: 'To book', activeClass: 'bg-amber-500/90 text-slate-900' },
+  { value: 'booked', label: 'Booked', activeClass: 'bg-emerald-500/90 text-slate-900' },
+];
+
+function BookingStatusField({ value, onChange }) {
+  const current = value || 'none';
+  return (
+    <div>
+      <label className="label flex items-center gap-1.5 mb-2">
+        <BookmarkCheck size={13} className="text-slate-400" />
+        Booking
+      </label>
+      <div className="flex rounded-lg bg-slate-900 border border-slate-700 p-0.5">
+        {BOOKING_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              current === opt.value ? opt.activeClass : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -482,6 +550,7 @@ function HotelForm({ data, onChange, tripId }) {
         <InputField label="Confirmation #" icon={Hash} value={data.confirmationNumber} onChange={v => onChange({ ...data, confirmationNumber: v })} placeholder="e.g. HTLBK12345" />
         <InputField label="Room Type" value={data.roomType} onChange={v => onChange({ ...data, roomType: v })} placeholder="e.g. Deluxe King" />
       </div>
+      <BookingStatusField value={data.bookingStatus} onChange={v => onChange({ ...data, bookingStatus: v })} />
       <InputField label="Phone Number" icon={Phone} type="tel" value={data.phoneNumber} onChange={v => onChange({ ...data, phoneNumber: v })} placeholder="Hotel contact number" />
       <TextAreaField label="Notes" icon={FileText} value={data.notes} onChange={v => onChange({ ...data, notes: v })} placeholder="Special requests, amenities, nearby attractions..." />
     </div>
