@@ -1,5 +1,4 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { prisma } = require('./lib/access');
 
 // Per-MTok rates in cents (300 = $3.00 per million tokens). Verified via web
 // search, June 2026.
@@ -53,4 +52,4 @@ async function recordCost({ tripId, service, operation, model, inputTokens, outp
   }
 }
 
-module.exports = { recordCost, calculateTokenCost, calculatePlacesCost, PLACES_PRICING, prisma };
+module.exports = { recordCost, calculateTokenCost, calculatePlacesCost, PLACES_PRICING };

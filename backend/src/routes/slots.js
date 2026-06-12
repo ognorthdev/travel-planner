@@ -1,10 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
 const { recordCost, calculatePlacesCost } = require('../costs');
-const { assertTripAccess, tripIdForSlot } = require('../lib/access');
-
-const prisma = new PrismaClient();
+const { prisma, assertTripAccess, tripIdForSlot } = require('../lib/access');
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 

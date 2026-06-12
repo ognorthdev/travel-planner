@@ -30,19 +30,21 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
 // trip invites addressed to their email.
 async function ensureAppUser(userId, email) {
   const lower = (email || '').toLowerCase();
-  let appUser = await prisma.appUser.findUnique({ where: { userId } });
-  if (!appUser) {
-    const isAdmin = ADMIN_EMAILS.includes(lower);
-    appUser = await prisma.appUser.create({
-      data: { userId, email: lower, status: isAdmin ? 'approved' : 'pending', isAdmin },
+  const isAdmin = ADMIN_EMAILS.includes(lower);
+  // Upsert: the frontend fires several requests concurrently on first login,
+  // so find-then-create would race itself into a unique-constraint error.
+  const appUser = await prisma.appUser.upsert({
+    where: { userId },
+    update: {},
+    create: { userId, email: lower, status: isAdmin ? 'approved' : 'pending', isAdmin },
+  });
+  // Claim any invites sent to this email before the account existed.
+  // Safe to repeat: the filter only matches still-unclaimed rows.
+  if (lower) {
+    await prisma.tripMember.updateMany({
+      where: { email: lower, userId: null },
+      data: { userId },
     });
-    // Claim any invites sent to this email before the account existed.
-    if (lower) {
-      await prisma.tripMember.updateMany({
-        where: { email: lower, userId: null },
-        data: { userId },
-      });
-    }
   }
   return appUser;
 }

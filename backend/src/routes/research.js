@@ -1,11 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
 const { recordCost, calculatePlacesCost } = require('../costs');
 const { fetchEnrichment } = require('../enrichment');
-const { assertTripAccess } = require('../lib/access');
-
-const prisma = new PrismaClient();
+const { prisma, assertTripAccess } = require('../lib/access');
 
 // Anthropic client
 let anthropic = null;

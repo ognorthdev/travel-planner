@@ -76,11 +76,16 @@ app.use('/api/places', requireAuth, requireApproved, placesRouter);
 app.use('/api/research', requireAuth, requireApproved, researchRouter);
 app.use('/api/costs', requireAuth, requireApproved, costsRouter);
 
-// Global error handler
+// Global error handler. Errors we threw on purpose (HttpError) carry a status
+// and a user-safe message; anything else is an unexpected 500 whose message
+// (Prisma/upstream-API details) must not reach the client in production.
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
+  const status = err.status || 500;
+  const isProd = process.env.NODE_ENV === 'production';
+  const message = (status >= 500 && isProd) ? 'Internal server error' : (err.message || 'Internal server error');
+  res.status(status).json({
+    error: message,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });

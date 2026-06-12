@@ -173,8 +173,13 @@ router.get('/details/:placeId', async (req, res, next) => {
     }
 
     const { placeId } = req.params;
+    // Google place IDs are URL-safe tokens; reject anything else so a crafted
+    // value can't steer this key-signed request at a different API path.
+    if (!/^[A-Za-z0-9_-]+$/.test(placeId)) {
+      return res.status(400).json({ error: 'Invalid placeId' });
+    }
     const tripId = req.query.tripId;
-    const url = `https://places.googleapis.com/v1/places/${placeId}`;
+    const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {

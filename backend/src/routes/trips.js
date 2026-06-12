@@ -1,9 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const { assertTripAccess } = require('../lib/access');
-
-const prisma = new PrismaClient();
+const { prisma, assertTripAccess } = require('../lib/access');
 
 // GET /api/trips - Get all trips
 router.get('/', async (req, res, next) => {
