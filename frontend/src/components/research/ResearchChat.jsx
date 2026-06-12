@@ -52,8 +52,10 @@ export default function ResearchChat({ tripId, destination, onSuggestion, mealPr
   }, [tripId, streaming]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    // Instant scroll while streaming — a smooth scroll per token queues up
+    // competing animations and makes the whole chat feel laggy.
+    messagesEndRef.current?.scrollIntoView({ behavior: streaming ? 'auto' : 'smooth' });
+  }, [messages, streaming]);
 
   const handleSend = useCallback(async (text) => {
     if (streaming) return;

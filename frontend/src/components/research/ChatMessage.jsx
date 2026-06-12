@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { Bot, User, Sparkles, Loader2 } from 'lucide-react';
 
-export default function ChatMessage({ message, onReextract }) {
+// Memoized: while a response streams in, only the last message's object
+// changes, so earlier messages skip re-rendering on every token.
+function ChatMessage({ message, onReextract }) {
   const isUser = message.role === 'user';
   const [reextracting, setReextracting] = useState(false);
 
@@ -52,3 +54,5 @@ export default function ChatMessage({ message, onReextract }) {
     </div>
   );
 }
+
+export default memo(ChatMessage);
