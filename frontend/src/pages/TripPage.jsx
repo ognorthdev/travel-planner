@@ -457,6 +457,8 @@ export default function TripPage() {
       }
     } catch (err) {
       console.error('Delete failed:', err);
+      // The backend rejects e.g. non-owner trip deletion — tell the user why.
+      window.alert(err.message || 'Delete failed');
     }
   };
 
@@ -499,6 +501,7 @@ export default function TripPage() {
         onOpenSettings={() => setShowSettings(true)}
         onShare={() => setShowShare(true)}
         onPrint={() => navigate(`/trips/${tripId}/print`)}
+        onDeleteTrip={handleDeleteTrip}
       />
 
       {/* Horizontal Day Scroll */}

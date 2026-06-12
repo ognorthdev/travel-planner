@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, MapPin, Calendar, Plus, Settings, Loader2, Users, Printer } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Plus, Settings, Loader2, Users, Printer, Trash2 } from 'lucide-react';
 import CostBadge from './CostBadge';
 import { paletteFor } from '../lib/tripTheme.js';
 
@@ -10,7 +10,7 @@ function parseLocalDate(dateStr) {
 // Immersive trip-page header: the cover photo bleeds behind editorial serif
 // type and melts into the page background. Falls back to the trip-palette
 // gradient when there's no cover image yet.
-export default function TripHero({ trip, tripId, onBack, onAddDay, addingDay, onOpenSettings, onShare, onPrint }) {
+export default function TripHero({ trip, tripId, onBack, onAddDay, addingDay, onOpenSettings, onShare, onPrint, onDeleteTrip }) {
   const palette = paletteFor(trip?.destination);
 
   return (
@@ -55,6 +55,11 @@ export default function TripHero({ trip, tripId, onBack, onAddDay, addingDay, on
             {onOpenSettings && (
               <button onClick={onOpenSettings} className="p-2 rounded-lg glass text-slate-200 hover:bg-slate-950/60 transition-colors" title="Trip settings">
                 <Settings size={14} />
+              </button>
+            )}
+            {onDeleteTrip && (
+              <button onClick={onDeleteTrip} className="p-2 rounded-lg glass text-slate-200 hover:text-red-400 hover:bg-slate-950/60 transition-colors" title="Delete trip">
+                <Trash2 size={14} />
               </button>
             )}
             {onAddDay && (
