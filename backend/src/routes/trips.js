@@ -257,10 +257,13 @@ router.post('/:id/members', async (req, res, next) => {
     await assertTripAccess(req.params.id, req.user.id, { requireOwner: true });
 
     const { email, role } = req.body;
-    if (!email) {
+    if (!email || typeof email !== 'string') {
       return res.status(400).json({ error: 'email is required' });
     }
     const lower = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lower)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
     if (lower === req.user.email) {
       return res.status(400).json({ error: "You're already on this trip" });
     }

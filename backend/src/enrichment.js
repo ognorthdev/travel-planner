@@ -8,12 +8,17 @@ const EMPTY_ENRICHMENT = {
   googleMapsUrl: null, phoneNumber: null, openingHours: null,
 };
 
+// Shared by every route that turns Places photo references into URLs. The API
+// key travels in a header rather than the query string so it can't end up in
+// request logs or proxies.
 async function resolvePhotoUrls(photoRefs) {
   const results = await Promise.all(
     photoRefs.map(async (p) => {
       try {
-        const mediaUrl = `https://places.googleapis.com/v1/${p.name}/media?maxHeightPx=400&maxWidthPx=600&key=${GOOGLE_MAPS_API_KEY}&skipHttpRedirect=true`;
-        const resp = await fetch(mediaUrl);
+        const mediaUrl = `https://places.googleapis.com/v1/${p.name}/media?maxHeightPx=400&maxWidthPx=600&skipHttpRedirect=true`;
+        const resp = await fetch(mediaUrl, {
+          headers: { 'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY },
+        });
         if (!resp.ok) return null;
         const data = await resp.json();
         return data.photoUri ? { url: data.photoUri } : null;

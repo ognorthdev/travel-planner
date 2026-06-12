@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { recordCost, calculatePlacesCost } = require('../costs');
+const { resolvePhotoUrls } = require('../enrichment');
 const { assertTripAccess } = require('../lib/access');
+const { aiLimiter } = require('../middleware/rateLimit');
 
 // Conditionally load AI SDKs
 let anthropic = null;
@@ -56,23 +58,6 @@ async function askGemini(prompt) {
 }
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
-
-async function resolvePhotoUrls(photoRefs, maxPhotos = 2) {
-  const results = await Promise.all(
-    photoRefs.slice(0, maxPhotos).map(async (p) => {
-      try {
-        const mediaUrl = `https://places.googleapis.com/v1/${p.name}/media?maxHeightPx=400&maxWidthPx=600&key=${GOOGLE_MAPS_API_KEY}&skipHttpRedirect=true`;
-        const resp = await fetch(mediaUrl);
-        if (!resp.ok) return null;
-        const data = await resp.json();
-        return data.photoUri ? { url: data.photoUri } : null;
-      } catch {
-        return null;
-      }
-    })
-  );
-  return results.filter(Boolean);
-}
 
 async function geocodeLocation(query) {
   const url = 'https://places.googleapis.com/v1/places:searchText';
@@ -237,7 +222,7 @@ Return ONLY valid JSON, no markdown, no code fences:
 }
 
 // POST /api/ai/discover - Discover restaurants or activities near a location
-router.post('/discover', async (req, res, next) => {
+router.post('/discover', aiLimiter, async (req, res, next) => {
   try {
     const { location, slotType, description, destination, excludeNames, tripId } = req.body;
     if (!location || !slotType || !destination || !tripId) {
@@ -282,7 +267,7 @@ router.post('/discover', async (req, res, next) => {
       filteredPlaces.map(async (place) => {
         const photoSlice = (place.photos || []).slice(0, 4);
         photoApiCalls += photoSlice.length;
-        const photos = photoSlice.length > 0 ? await resolvePhotoUrls(place.photos, 4) : [];
+        const photos = photoSlice.length > 0 ? await resolvePhotoUrls(photoSlice) : [];
         return {
           name: place.displayName?.text || '',
           address: place.formattedAddress || '',

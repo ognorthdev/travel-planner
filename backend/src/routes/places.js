@@ -1,30 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { recordCost, calculatePlacesCost } = require('../costs');
-const { fetchEnrichment } = require('../enrichment');
+const { fetchEnrichment, resolvePhotoUrls } = require('../enrichment');
 const { assertTripAccess } = require('../lib/access');
+const { enrichLimiter } = require('../middleware/rateLimit');
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
-async function resolvePhotoUrls(photoRefs) {
-  const results = await Promise.all(
-    photoRefs.map(async (p) => {
-      try {
-        const mediaUrl = `https://places.googleapis.com/v1/${p.name}/media?maxHeightPx=400&maxWidthPx=600&key=${GOOGLE_MAPS_API_KEY}&skipHttpRedirect=true`;
-        const resp = await fetch(mediaUrl);
-        if (!resp.ok) return null;
-        const data = await resp.json();
-        return data.photoUri ? { url: data.photoUri } : null;
-      } catch {
-        return null;
-      }
-    })
-  );
-  return results.filter(Boolean);
-}
-
 // POST /api/places/autocomplete
-router.post('/autocomplete', async (req, res, next) => {
+router.post('/autocomplete', enrichLimiter, async (req, res, next) => {
   try {
     const { input, locationBias, tripId: bodyTripId } = req.body;
     if (!bodyTripId) {
@@ -90,7 +74,7 @@ router.post('/autocomplete', async (req, res, next) => {
 });
 
 // GET /api/places/photos?name=...&address=...&placeId=...
-router.get('/photos', async (req, res, next) => {
+router.get('/photos', enrichLimiter, async (req, res, next) => {
   try {
     if (!req.query.tripId) {
       return res.status(400).json({ error: 'tripId is required' });
@@ -171,7 +155,7 @@ router.get('/photos', async (req, res, next) => {
 });
 
 // GET /api/places/details/:placeId
-router.get('/details/:placeId', async (req, res, next) => {
+router.get('/details/:placeId', enrichLimiter, async (req, res, next) => {
   try {
     if (!req.query.tripId) {
       return res.status(400).json({ error: 'tripId is required' });
@@ -217,7 +201,7 @@ router.get('/details/:placeId', async (req, res, next) => {
 
 // POST /api/places/enrich — look up a place by name+address (used for transient research
 // suggestions that aren't saved cards yet). Saved cards persist their enrichment instead.
-router.post('/enrich', async (req, res, next) => {
+router.post('/enrich', enrichLimiter, async (req, res, next) => {
   try {
     const { name, address, tripId } = req.body;
     if (!tripId) {

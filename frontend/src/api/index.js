@@ -117,14 +117,16 @@ export const costsApi = {
 export async function* streamResearch(tripId, body) {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
+  // Keep the AbortSignal out of the JSON payload — it's fetch plumbing.
+  const { signal, ...payload } = body;
   const response = await fetch(`${API_BASE}/api/research/${tripId}/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify(body),
-    signal: body.signal,
+    body: JSON.stringify(payload),
+    signal,
   });
 
   if (!response.ok) {

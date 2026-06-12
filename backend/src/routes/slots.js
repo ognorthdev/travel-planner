@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { recordCost, calculatePlacesCost } = require('../costs');
+const { resolvePhotoUrls } = require('../enrichment');
 const { prisma, assertTripAccess, tripIdForSlot } = require('../lib/access');
 const { safeParseJson } = require('../lib/json');
+const { enrichLimiter } = require('../middleware/rateLimit');
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
@@ -17,21 +19,6 @@ try {
 }
 
 const VALID_SLOT_TYPES = ['BREAKFAST', 'LUNCH', 'DINNER', 'ACTIVITY', 'HOTEL'];
-
-async function resolvePhotoUrls(photoRefs) {
-  const results = await Promise.all(
-    photoRefs.map(async (p) => {
-      try {
-        const mediaUrl = `https://places.googleapis.com/v1/${p.name}/media?maxHeightPx=400&maxWidthPx=600&key=${GOOGLE_MAPS_API_KEY}&skipHttpRedirect=true`;
-        const resp = await fetch(mediaUrl);
-        if (!resp.ok) return null;
-        const data = await resp.json();
-        return data.photoUri ? { url: data.photoUri } : null;
-      } catch { return null; }
-    })
-  );
-  return results.filter(Boolean);
-}
 
 // GET /api/days/:dayId/slots - Get all slots for a day
 router.get('/days/:dayId/slots', async (req, res, next) => {
@@ -289,7 +276,7 @@ router.delete('/slots/:id', async (req, res, next) => {
 });
 
 // POST /api/slots/:id/enrich — Fetch rich detail data for a slot
-router.post('/slots/:id/enrich', async (req, res, next) => {
+router.post('/slots/:id/enrich', enrichLimiter, async (req, res, next) => {
   try {
     const slot = await prisma.slot.findUnique({
       where: { id: req.params.id },

@@ -4,6 +4,7 @@ const { recordCost, calculatePlacesCost } = require('../costs');
 const { fetchEnrichment } = require('../enrichment');
 const { prisma, assertTripAccess } = require('../lib/access');
 const { safeParseJson } = require('../lib/json');
+const { aiLimiter, enrichLimiter } = require('../middleware/rateLimit');
 
 // Anthropic client
 let anthropic = null;
@@ -227,7 +228,14 @@ async function streamGeminiText(res, { systemPrompt, query, messages, isClosed, 
         }
       }
       if (isClosed()) return accumulatedText;
-      recordCost({ tripId, service: 'gemini-flash', operation, model: modelId, inputTokens: Math.ceil(query.length / 4), outputTokens: Math.ceil(accumulatedText.length / 4) });
+      // Bill from the API's own usage metadata; fall back to a length
+      // estimate only if the response shape doesn't include it.
+      const usage = (await result.response)?.usageMetadata || {};
+      recordCost({
+        tripId, service: 'gemini-flash', operation, model: modelId,
+        inputTokens: usage.promptTokenCount ?? Math.ceil(query.length / 4),
+        outputTokens: usage.candidatesTokenCount ?? Math.ceil(accumulatedText.length / 4),
+      });
       return accumulatedText;
     } catch (err) {
       const is503 = err.status === 503 || err.message?.includes('503');
@@ -310,7 +318,7 @@ router.post('/:tripId/ideas', async (req, res, next) => {
 
 // POST /api/research/ideas/:id/enrich — return the idea's stored enrichment, or fetch it
 // once from Places and persist it onto the idea (so it's never billed again until deleted).
-router.post('/ideas/:id/enrich', async (req, res, next) => {
+router.post('/ideas/:id/enrich', enrichLimiter, async (req, res, next) => {
   try {
     const idea = await prisma.idea.findUnique({ where: { id: req.params.id } });
     if (!idea) {
@@ -410,7 +418,8 @@ router.put('/:tripId/summary', async (req, res, next) => {
   try {
     await assertTripAccess(req.params.tripId, req.user.id, { write: true });
     const { summary } = req.body;
-    if (!summary) {
+    // Empty string is allowed: it clears the summary.
+    if (typeof summary !== 'string') {
       return res.status(400).json({ error: 'summary is required' });
     }
 
@@ -426,7 +435,7 @@ router.put('/:tripId/summary', async (req, res, next) => {
 });
 
 // POST /api/research/:tripId/extract — re-extract idea cards from a single message's text
-router.post('/:tripId/extract', async (req, res, next) => {
+router.post('/:tripId/extract', aiLimiter, async (req, res, next) => {
   try {
     // write: extraction runs a paid model call
     await assertTripAccess(req.params.tripId, req.user.id, { write: true });
@@ -443,7 +452,7 @@ router.post('/:tripId/extract', async (req, res, next) => {
 });
 
 // POST /api/research/:tripId/stream — SSE streaming endpoint
-router.post('/:tripId/stream', async (req, res) => {
+router.post('/:tripId/stream', aiLimiter, async (req, res) => {
   const { query, mode, messages, destination, mealPreferences, activityPreferences, tripContext, injectContext } = req.body;
   if (!query || !destination) {
     return res.status(400).json({ error: 'query and destination are required' });
@@ -466,6 +475,14 @@ router.post('/:tripId/stream', async (req, res) => {
 
   let closed = false;
   res.on('close', () => { closed = true; });
+
+  // Heartbeat: long research calls can go quiet for minutes while the model
+  // searches; without traffic, Render's proxy drops the idle connection. SSE
+  // comment lines (leading colon) are ignored by the client parser.
+  const heartbeat = setInterval(() => {
+    if (!closed) res.write(': ping\n\n');
+  }, 20000);
+  res.on('close', () => clearInterval(heartbeat));
 
   const tripId = req.params.tripId;
   try {

@@ -16,6 +16,10 @@ const { prisma } = require('./lib/access');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Render terminates TLS at its proxy; trust the first hop so req.ip and
+// req.protocol reflect the real client.
+app.set('trust proxy', 1);
+
 // Allowed frontend origins (comma-separated). Falls back to local dev.
 const trustedOrigins = (process.env.TRUSTED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
   .split(',')
@@ -49,6 +53,11 @@ app.get('/api/me', requireAuth, (req, res) => {
 app.put('/api/me', requireAuth, async (req, res, next) => {
   try {
     const { researchContext } = req.body;
+    if (researchContext !== undefined) {
+      if (typeof researchContext !== 'string' || researchContext.length > 5000) {
+        return res.status(400).json({ error: 'researchContext must be a string of at most 5000 characters' });
+      }
+    }
     const updated = await prisma.appUser.update({
       where: { userId: req.user.id },
       data: { ...(researchContext !== undefined && { researchContext }) },
@@ -90,8 +99,21 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Travel Planner backend running on http://localhost:${PORT}`);
 });
+
+// Graceful shutdown: Render sends SIGTERM on every deploy. Stop accepting new
+// connections, let in-flight requests finish, then release DB connections.
+function shutdown(signal) {
+  console.log(`${signal} received, shutting down`);
+  server.close(() => {
+    prisma.$disconnect().finally(() => process.exit(0));
+  });
+  // Failsafe: don't hang forever on a stuck stream.
+  setTimeout(() => process.exit(1), 10000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 module.exports = app;
