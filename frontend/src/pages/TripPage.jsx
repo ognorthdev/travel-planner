@@ -1,15 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Loader2,
   Trash2, X, AlertTriangle, GripVertical, Map as MapIcon
 } from 'lucide-react';
 import { tripsApi, daysApi, slotsApi, researchApi } from '../api/index.js';
-import DayMapModal from '../components/DayMapModal.jsx';
 import TravelTimeConnector from '../components/TravelTimeConnector.jsx';
 import ResearchBottomPanel from '../components/research/ResearchBottomPanel';
-import ResearchOverlay from '../components/research/ResearchOverlay';
 import SuggestionDetailModal from '../components/research/SuggestionDetailModal';
+
+// Lazy: the day map pulls in all of Leaflet and the research overlay pulls in
+// the chat stack — neither should weigh down the trip board's first paint.
+const DayMapModal = lazy(() => import('../components/DayMapModal.jsx'));
+const ResearchOverlay = lazy(() => import('../components/research/ResearchOverlay'));
 import TripSettings from '../components/TripSettings.jsx';
 import TripHero from '../components/TripHero.jsx';
 import { tripThemeVars } from '../lib/tripTheme.js';
@@ -616,12 +619,14 @@ export default function TripPage() {
       {mapDayId && (() => {
         const mapDay = days.find(d => d.id === mapDayId);
         return mapDay ? (
-          <DayMapModal
-            day={mapDay}
-            onClose={() => setMapDayId(null)}
-            onComputeTravelTimes={() => handleComputeTravelTimes(mapDayId)}
-            computingTravel={computingTravel}
-          />
+          <Suspense fallback={null}>
+            <DayMapModal
+              day={mapDay}
+              onClose={() => setMapDayId(null)}
+              onComputeTravelTimes={() => handleComputeTravelTimes(mapDayId)}
+              computingTravel={computingTravel}
+            />
+          </Suspense>
         ) : null;
       })()}
 
@@ -635,20 +640,22 @@ export default function TripPage() {
       )}
 
       {showResearch && trip && (
-        <ResearchOverlay
-          trip={trip}
-          tripId={tripId}
-          destination={trip.destination}
-          onClose={() => setShowResearch(false)}
-          onAddDay={handleAddDay}
-          addingDay={addingDay}
-          onOpenSettings={() => setShowSettings(true)}
-          savedIdeas={savedIdeas}
-          onIdeasChange={setSavedIdeas}
-          mealPreferences={trip.mealPreferences}
-          activityPreferences={trip.activityPreferences}
-          tripContext={trip.researchContext}
-        />
+        <Suspense fallback={null}>
+          <ResearchOverlay
+            trip={trip}
+            tripId={tripId}
+            destination={trip.destination}
+            onClose={() => setShowResearch(false)}
+            onAddDay={handleAddDay}
+            addingDay={addingDay}
+            onOpenSettings={() => setShowSettings(true)}
+            savedIdeas={savedIdeas}
+            onIdeasChange={setSavedIdeas}
+            mealPreferences={trip.mealPreferences}
+            activityPreferences={trip.activityPreferences}
+            tripContext={trip.researchContext}
+          />
+        </Suspense>
       )}
 
       {showSettings && trip && (
