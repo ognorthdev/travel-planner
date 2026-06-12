@@ -570,6 +570,7 @@ export default function PlanningPage() {
   const [error, setError] = useState('');
   const [copyingHotel, setCopyingHotel] = useState(false);
   const [copiedHotel, setCopiedHotel] = useState(false);
+  const [copiedHotelCount, setCopiedHotelCount] = useState(0);
 
   const slotType = slot?.type;
   const isHotel = slotType === 'HOTEL';
@@ -616,23 +617,35 @@ export default function PlanningPage() {
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
   }, [formData, slotId]);
 
-  const handleCopyHotelToAllDays = async () => {
-    if (!trip?.days) return;
-    const otherHotelSlots = trip.days
+  // Copy this hotel's details to the other nights of the stay: days from
+  // check-in (inclusive) up to check-out (exclusive) — no hotel night on the
+  // check-out day itself.
+  const hotelCheckIn = (formData.checkIn || '').slice(0, 10);
+  const hotelCheckOut = (formData.checkOut || '').slice(0, 10);
+  const hasStayDates = Boolean(hotelCheckIn && hotelCheckOut);
+
+  const handleCopyHotelToStayDates = async () => {
+    if (!trip?.days || !hasStayDates) return;
+    const stayHotelSlots = trip.days
+      .filter(d => {
+        const date = (d.date || '').slice(0, 10);
+        return date >= hotelCheckIn && date < hotelCheckOut;
+      })
       .flatMap(d => (d.slots || []))
       .filter(s => s.type === 'HOTEL' && s.id !== slotId);
 
-    if (otherHotelSlots.length === 0) return;
+    if (stayHotelSlots.length === 0) return;
 
     setCopyingHotel(true);
     try {
       await Promise.all(
-        otherHotelSlots.map(s => slotsApi.update(s.id, { data: formData }))
+        stayHotelSlots.map(s => slotsApi.update(s.id, { data: formData }))
       );
+      setCopiedHotelCount(stayHotelSlots.length);
       setCopiedHotel(true);
       setTimeout(() => setCopiedHotel(false), 3000);
     } catch (err) {
-      console.error('Failed to copy hotel to all days:', err);
+      console.error('Failed to copy hotel to stay dates:', err);
     } finally {
       setCopyingHotel(false);
     }
@@ -793,23 +806,30 @@ export default function PlanningPage() {
               </div>
 
               {trip?.days?.length > 1 && (
-                <button
-                  onClick={handleCopyHotelToAllDays}
-                  disabled={copyingHotel || !formData.hotelName}
-                  className={`w-full border-2 rounded-xl py-3 px-4 font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
-                    copiedHotel
-                      ? 'border-emerald-500/50 bg-emerald-900/20 text-emerald-400'
-                      : 'border-purple-700/50 hover:border-purple-500 bg-purple-900/20 hover:bg-purple-900/40 text-purple-300'
-                  }`}
-                >
-                  {copyingHotel ? (
-                    <><Loader2 size={16} className="animate-spin" />Copying to all days...</>
-                  ) : copiedHotel ? (
-                    <><Check size={16} />Copied to {trip.days.length - 1} other day{trip.days.length - 1 !== 1 ? 's' : ''}</>
-                  ) : (
-                    <><Copy size={16} />Copy hotel to all days</>
+                <div>
+                  <button
+                    onClick={handleCopyHotelToStayDates}
+                    disabled={copyingHotel || !formData.hotelName || !hasStayDates}
+                    className={`w-full border-2 rounded-xl py-3 px-4 font-semibold transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      copiedHotel
+                        ? 'border-emerald-500/50 bg-emerald-900/20 text-emerald-400'
+                        : 'border-purple-700/50 hover:border-purple-500 bg-purple-900/20 hover:bg-purple-900/40 text-purple-300'
+                    }`}
+                  >
+                    {copyingHotel ? (
+                      <><Loader2 size={16} className="animate-spin" />Copying to stay dates...</>
+                    ) : copiedHotel ? (
+                      <><Check size={16} />Copied to {copiedHotelCount} other day{copiedHotelCount !== 1 ? 's' : ''} of this stay</>
+                    ) : (
+                      <><Copy size={16} />Copy hotel to stay dates</>
+                    )}
+                  </button>
+                  {formData.hotelName && !hasStayDates && (
+                    <p className="text-xs text-slate-500 mt-1.5 text-center">
+                      Set check-in and check-out dates to copy this hotel to the other nights of the stay.
+                    </p>
                   )}
-                </button>
+                </div>
               )}
 
               <div className="pb-8" />
