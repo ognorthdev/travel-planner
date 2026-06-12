@@ -28,31 +28,47 @@ export default function ResearchOverlay({ trip, tripId, destination, onClose, on
     setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
   }, []);
 
+  // Optimistic: flip the heart immediately and reconcile with the server in the
+  // background, reverting if the request fails.
   const handleToggleSave = useCallback(async (suggestion) => {
     const isCurrentlySaved = savedNames.has(suggestion.name);
 
     if (isCurrentlySaved) {
       const existing = savedIdeas.find(i => i.name === suggestion.name);
-      if (existing) {
-        await researchApi.deleteIdea(existing.id);
-        onIdeasChange(prev => prev.filter(i => i.id !== existing.id));
-      }
       setSavedNames(prev => {
         const next = new Set(prev);
         next.delete(suggestion.name);
         return next;
       });
+      if (!existing) return;
+      onIdeasChange(prev => prev.filter(i => i.id !== existing.id));
+      try {
+        await researchApi.deleteIdea(existing.id);
+      } catch (err) {
+        console.error('Failed to un-save idea:', err);
+        setSavedNames(prev => new Set([...prev, suggestion.name]));
+        onIdeasChange(prev => [...prev, existing]);
+      }
     } else {
-      const enrichment = enrichmentMap.current.get(suggestion.id);
-      const saved = await researchApi.saveIdea(tripId, {
-        type: suggestion.type,
-        name: suggestion.name,
-        description: suggestion.description || '',
-        // Persist the already-fetched enrichment onto the idea so it's never re-billed.
-        data: { ...(suggestion.data || {}), ...(enrichment ? { enrichment } : {}) },
-      });
-      onIdeasChange(prev => [...prev, saved]);
       setSavedNames(prev => new Set([...prev, suggestion.name]));
+      const enrichment = enrichmentMap.current.get(suggestion.id);
+      try {
+        const saved = await researchApi.saveIdea(tripId, {
+          type: suggestion.type,
+          name: suggestion.name,
+          description: suggestion.description || '',
+          // Persist the already-fetched enrichment onto the idea so it's never re-billed.
+          data: { ...(suggestion.data || {}), ...(enrichment ? { enrichment } : {}) },
+        });
+        onIdeasChange(prev => [...prev, saved]);
+      } catch (err) {
+        console.error('Failed to save idea:', err);
+        setSavedNames(prev => {
+          const next = new Set(prev);
+          next.delete(suggestion.name);
+          return next;
+        });
+      }
     }
   }, [savedNames, savedIdeas, tripId, onIdeasChange]);
 
