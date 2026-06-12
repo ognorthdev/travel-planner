@@ -64,9 +64,10 @@ export default function SlotCard({ slot, dayId, tripId, onDelete, index, isDragg
         draggable
         onDragStart={handleDragStart}
         onClick={handleClick}
-        className={`group relative rounded-xl border ${config.border} overflow-hidden cursor-pointer hover:shadow-lg hover:shadow-black/40 transition-all duration-200 hover:-translate-y-0.5 ${isDragging ? 'opacity-40 scale-95' : ''} ${compact ? 'flex-shrink-0 w-48' : ''}`}
+        className={`group relative rounded-xl border ${config.border} cursor-pointer hover:shadow-lg hover:shadow-black/40 transition-all duration-200 hover:-translate-y-0.5 ${isDragging ? 'opacity-40 scale-95' : ''} ${compact ? 'flex-shrink-0 w-48' : ''}`}
       >
-        <div className="relative h-20">
+        {/* Clip the photo here (not on the card) so the delete X can overhang the corner. */}
+        <div className="relative h-20 rounded-[11px] overflow-hidden">
           <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-transparent" />
           <div className="absolute top-1.5 left-1.5 flex items-center gap-1">

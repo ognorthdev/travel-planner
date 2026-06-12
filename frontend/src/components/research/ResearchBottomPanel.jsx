@@ -87,7 +87,9 @@ export default function ResearchBottomPanel({ ideas, onOpenResearch, onDeleteIde
               Save ideas from research to drag them into your days
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2 content-start pr-1">
+            <div className="flex flex-wrap gap-2 content-start pt-2 pr-2">
+              {/* pt/pr leave room for the delete X that overhangs the card corners,
+                  so the scroll container doesn't clip it on the top row. */}
               {ideas.map(idea => (
                 <IdeaBubble
                   key={idea.id}
