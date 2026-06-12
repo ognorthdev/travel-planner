@@ -80,29 +80,59 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
   const watchOutFor = data.watchOutFor || [];
   const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(suggestion.type);
 
+  const bannerPhoto = photos[0];
+
   return (
     <div
-      className="bg-slate-800 border border-slate-700 rounded-2xl p-4 cursor-pointer hover:border-slate-600 transition-all animate-slide-up"
+      className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden cursor-pointer hover:border-slate-600 transition-all animate-slide-up"
       style={style}
       onClick={() => onClick?.(suggestion)}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          {/* Header: type badge, name, cuisine/category, price */}
-          <div className="flex items-center gap-2 flex-wrap mb-1.5">
-            <div className={`w-6 h-6 rounded-lg ${config.bg} flex items-center justify-center flex-shrink-0`}>
-              <Icon size={13} className={config.color} />
-            </div>
-            <h4 className="font-bold text-slate-100 text-sm">{suggestion.name}</h4>
+      {/* Photo header: first enrichment photo with the name laid over it */}
+      {bannerPhoto && (
+        <div className="relative h-28">
+          <img
+            src={bannerPhoto.url}
+            alt={suggestion.name}
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
+          <span className={`absolute top-2 left-2 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-slate-950/60 backdrop-blur-sm ${config.color}`}>
+            <Icon size={9} />
+            {config.label}
+          </span>
+          <div className="absolute bottom-2 left-3 right-3 flex items-baseline gap-2 flex-wrap">
+            <h4 className="font-display font-semibold text-white text-base leading-tight text-shadow-hero">{suggestion.name}</h4>
             {(data.cuisine || data.category) && (
-              <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-600">
-                {data.cuisine || data.category}
-              </span>
+              <span className="text-[10px] text-slate-200/90 text-shadow-hero">{data.cuisine || data.category}</span>
             )}
             {data.priceRange && (
-              <span className="text-[10px] text-emerald-400 font-semibold">{data.priceRange}</span>
+              <span className="text-[10px] text-emerald-300 font-semibold text-shadow-hero">{data.priceRange}</span>
             )}
           </div>
+        </div>
+      )}
+
+      <div className="flex items-start justify-between gap-3 p-4">
+        <div className="flex-1 min-w-0">
+          {/* Header (photo-less cards only — the banner carries it otherwise) */}
+          {!bannerPhoto && (
+            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+              <div className={`w-6 h-6 rounded-lg ${config.bg} flex items-center justify-center flex-shrink-0`}>
+                <Icon size={13} className={config.color} />
+              </div>
+              <h4 className="font-bold text-slate-100 text-sm">{suggestion.name}</h4>
+              {(data.cuisine || data.category) && (
+                <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-600">
+                  {data.cuisine || data.category}
+                </span>
+              )}
+              {data.priceRange && (
+                <span className="text-[10px] text-emerald-400 font-semibold">{data.priceRange}</span>
+              )}
+            </div>
+          )}
 
           {/* Star rating */}
           <StarRating rating={rating} reviewCount={reviewCount} />
@@ -151,25 +181,19 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
             )}
           </div>
 
-          {/* Photos */}
-          {photos.length > 0 && (
-            <div className={`grid gap-1.5 mt-2.5 ${photos.length >= 4 ? 'grid-cols-2' : photos.length >= 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              {photos.slice(0, 4).map((photo, pi) => {
-                const labels = ['Exterior', 'Interior', 'Food', 'Food'];
-                return (
-                  <div key={pi} className="relative h-20 rounded-lg overflow-hidden bg-slate-700/50">
-                    <img
-                      src={photo.url}
-                      alt={`${suggestion.name} - ${labels[pi] || 'Photo'}`}
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                    <span className="absolute bottom-0.5 left-0.5 text-[8px] font-medium bg-black/60 text-white px-1 py-0.5 rounded">
-                      {labels[pi]}
-                    </span>
-                  </div>
-                );
-              })}
+          {/* Remaining photos (the first one is the banner) */}
+          {photos.length > 1 && (
+            <div className="grid grid-cols-3 gap-1.5 mt-2.5">
+              {photos.slice(1, 4).map((photo, pi) => (
+                <div key={pi} className="relative h-14 rounded-lg overflow-hidden bg-slate-700/50">
+                  <img
+                    src={photo.url}
+                    alt={`${suggestion.name} photo ${pi + 2}`}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              ))}
             </div>
           )}
 

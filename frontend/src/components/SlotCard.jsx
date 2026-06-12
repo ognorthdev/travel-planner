@@ -55,15 +55,16 @@ export default function SlotCard({ slot, dayId, tripId, onDelete, index, isDragg
     }
   };
 
-  // Photo-banner variant: filled day-plan slots with an enrichment photo lead
-  // with the image, like the rest of the destination-forward UI.
-  if (!compact && thumbnailUrl) {
+  // Photo-banner variant: slots/ideas with an enrichment photo lead with the
+  // image, like the rest of the destination-forward UI. Used for day-plan
+  // cards and (narrower) idea cards in the research panel.
+  if (thumbnailUrl) {
     return (
       <div
         draggable
         onDragStart={handleDragStart}
         onClick={handleClick}
-        className={`group relative rounded-xl border ${config.border} overflow-hidden cursor-pointer hover:shadow-lg hover:shadow-black/40 transition-all duration-200 hover:-translate-y-0.5 ${isDragging ? 'opacity-40 scale-95' : ''}`}
+        className={`group relative rounded-xl border ${config.border} overflow-hidden cursor-pointer hover:shadow-lg hover:shadow-black/40 transition-all duration-200 hover:-translate-y-0.5 ${isDragging ? 'opacity-40 scale-95' : ''} ${compact ? 'flex-shrink-0 w-48' : ''}`}
       >
         <div className="relative h-20">
           <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
