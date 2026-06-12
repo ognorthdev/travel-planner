@@ -3,6 +3,7 @@ const router = express.Router();
 const { recordCost, calculatePlacesCost } = require('../costs');
 const { fetchEnrichment } = require('../enrichment');
 const { prisma, assertTripAccess } = require('../lib/access');
+const { safeParseJson } = require('../lib/json');
 
 // Anthropic client
 let anthropic = null;
@@ -266,7 +267,7 @@ router.get('/:tripId/ideas', async (req, res, next) => {
     });
     res.json(ideas.map(idea => ({
       ...idea,
-      data: typeof idea.data === 'string' ? JSON.parse(idea.data) : idea.data
+      data: safeParseJson(idea.data)
     })));
   } catch (err) {
     next(err);
@@ -300,7 +301,7 @@ router.post('/:tripId/ideas', async (req, res, next) => {
 
     res.status(201).json({
       ...idea,
-      data: typeof idea.data === 'string' ? JSON.parse(idea.data) : idea.data
+      data: safeParseJson(idea.data)
     });
   } catch (err) {
     next(err);
@@ -316,7 +317,7 @@ router.post('/ideas/:id/enrich', async (req, res, next) => {
       return res.status(404).json({ error: 'Idea not found' });
     }
     await assertTripAccess(idea.tripId, req.user.id);
-    const data = typeof idea.data === 'string' ? JSON.parse(idea.data || '{}') : (idea.data || {});
+    const data = safeParseJson(idea.data);
 
     if (data.enrichment && !req.body.force) {
       return res.json(data.enrichment); // already persisted on the card — no Places call
@@ -365,7 +366,7 @@ router.put('/:tripId/ideas/reorder', async (req, res, next) => {
       return res.status(400).json({ error: 'All ideaIds must belong to this trip' });
     }
 
-    await Promise.all(
+    await prisma.$transaction(
       ideaIds.map((id, index) =>
         prisma.idea.update({
           where: { id },
@@ -380,7 +381,7 @@ router.put('/:tripId/ideas/reorder', async (req, res, next) => {
     });
     res.json(ideas.map(idea => ({
       ...idea,
-      data: typeof idea.data === 'string' ? JSON.parse(idea.data) : idea.data
+      data: safeParseJson(idea.data)
     })));
   } catch (err) {
     next(err);

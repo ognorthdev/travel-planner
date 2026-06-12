@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { prisma, assertTripAccess } = require('../lib/access');
+const { safeParseJson } = require('../lib/json');
 
 // GET /api/trips - Get all trips
 router.get('/', async (req, res, next) => {
@@ -34,6 +35,10 @@ const DEFAULT_DAY_SLOTS = [
   { type: 'HOTEL', sortOrder: 0 },
 ];
 
+// Hard cap on trip length: protects against a bogus endDate (e.g. year 2099)
+// fanning out into thousands of Day inserts.
+const MAX_TRIP_DAYS = 90;
+
 // POST /api/trips - Create a new trip
 router.post('/', async (req, res, next) => {
   try {
@@ -45,46 +50,53 @@ router.post('/', async (req, res, next) => {
 
     const start = new Date(startDate);
     const end = new Date(endDate);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return res.status(400).json({ error: 'startDate and endDate must be valid dates' });
+    }
+    if (end < start) {
+      return res.status(400).json({ error: 'endDate must be on or after startDate' });
+    }
     const totalDays = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
+    if (totalDays > MAX_TRIP_DAYS) {
+      return res.status(400).json({ error: `Trips are limited to ${MAX_TRIP_DAYS} days` });
+    }
 
-    const trip = await prisma.trip.create({
-      data: {
-        name,
-        destination,
-        startDate: start,
-        endDate: end,
-        coverImageUrl: coverImageUrl || null,
-        userId: req.user.id,
-        // creator becomes the OWNER member
-        members: { create: { email: req.user.email, userId: req.user.id, role: 'OWNER' } },
-      },
-    });
-
-    for (let i = 0; i < totalDays; i++) {
-      const dayDate = new Date(start);
-      dayDate.setDate(dayDate.getDate() + i);
-
-      const day = await prisma.day.create({
+    // Create the trip with all its days and default slots atomically — a
+    // failure partway through must not leave a half-built trip behind.
+    const trip = await prisma.$transaction(async (tx) => {
+      const created = await tx.trip.create({
         data: {
-          tripId: trip.id,
-          date: dayDate,
-          dayNumber: i + 1,
+          name,
+          destination,
+          startDate: start,
+          endDate: end,
+          coverImageUrl: coverImageUrl || null,
+          userId: req.user.id,
+          // creator becomes the OWNER member
+          members: { create: { email: req.user.email, userId: req.user.id, role: 'OWNER' } },
         },
       });
 
-      await Promise.all(
-        DEFAULT_DAY_SLOTS.map(slot =>
-          prisma.slot.create({
-            data: {
-              dayId: day.id,
-              type: slot.type,
-              sortOrder: slot.sortOrder,
-              data: '{}',
+      for (let i = 0; i < totalDays; i++) {
+        const dayDate = new Date(start);
+        dayDate.setDate(dayDate.getDate() + i);
+        await tx.day.create({
+          data: {
+            tripId: created.id,
+            date: dayDate,
+            dayNumber: i + 1,
+            slots: {
+              create: DEFAULT_DAY_SLOTS.map(slot => ({
+                type: slot.type,
+                sortOrder: slot.sortOrder,
+                data: '{}',
+              })),
             },
-          })
-        )
-      );
-    }
+          },
+        });
+      }
+      return created;
+    });
 
     const fullTrip = await prisma.trip.findUnique({
       where: { id: trip.id },
@@ -130,7 +142,7 @@ router.get('/:id', async (req, res, next) => {
         ...day,
         slots: day.slots.map(slot => ({
           ...slot,
-          data: typeof slot.data === 'string' ? JSON.parse(slot.data) : slot.data
+          data: safeParseJson(slot.data)
         }))
       }))
     };
@@ -148,6 +160,11 @@ router.put('/:id', async (req, res, next) => {
 
     // any collaborator may edit trip details
     await assertTripAccess(req.params.id, req.user.id);
+
+    if ((startDate && Number.isNaN(new Date(startDate).getTime())) ||
+        (endDate && Number.isNaN(new Date(endDate).getTime()))) {
+      return res.status(400).json({ error: 'startDate and endDate must be valid dates' });
+    }
 
     const updatedTrip = await prisma.trip.update({
       where: { id: req.params.id },
@@ -200,7 +217,7 @@ router.get('/:id/locations', async (req, res, next) => {
     const locations = [];
     for (const day of trip.days) {
       for (const slot of day.slots) {
-        const data = typeof slot.data === 'string' ? JSON.parse(slot.data) : (slot.data || {});
+        const data = safeParseJson(slot.data);
         if (slot.type === 'HOTEL' && data.hotelName && data.address) {
           locations.push({ label: data.hotelName, address: data.address, type: 'hotel', dayNumber: day.dayNumber });
         } else if (slot.type === 'ACTIVITY' && data.activityName && data.location) {

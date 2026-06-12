@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { recordCost, calculatePlacesCost } = require('../costs');
 const { prisma, assertTripAccess, tripIdForSlot } = require('../lib/access');
+const { safeParseJson } = require('../lib/json');
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
@@ -48,7 +49,7 @@ router.get('/days/:dayId/slots', async (req, res, next) => {
 
     const parsedSlots = slots.map(slot => ({
       ...slot,
-      data: typeof slot.data === 'string' ? JSON.parse(slot.data) : slot.data
+      data: safeParseJson(slot.data)
     }));
 
     res.json(parsedSlots);
@@ -99,7 +100,7 @@ router.post('/days/:dayId/slots', async (req, res, next) => {
 
     res.status(201).json({
       ...slot,
-      data: JSON.parse(slot.data)
+      data: safeParseJson(slot.data)
     });
   } catch (err) {
     next(err);
@@ -117,7 +118,7 @@ router.get('/slots/:id', async (req, res, next) => {
 
     res.json({
       ...slot,
-      data: typeof slot.data === 'string' ? JSON.parse(slot.data) : slot.data
+      data: safeParseJson(slot.data)
     });
   } catch (err) {
     next(err);
@@ -150,7 +151,7 @@ router.put('/slots/:id', async (req, res, next) => {
 
     res.json({
       ...updatedSlot,
-      data: typeof updatedSlot.data === 'string' ? JSON.parse(updatedSlot.data) : updatedSlot.data
+      data: safeParseJson(updatedSlot.data)
     });
   } catch (err) {
     next(err);
@@ -192,7 +193,7 @@ router.put('/days/:dayId/slots/reorder', async (req, res, next) => {
 
     const parsedSlots = slots.map(slot => ({
       ...slot,
-      data: typeof slot.data === 'string' ? JSON.parse(slot.data) : slot.data
+      data: safeParseJson(slot.data)
     }));
 
     res.json(parsedSlots);
@@ -225,12 +226,17 @@ router.put('/slots/:id/move', async (req, res, next) => {
       return res.status(400).json({ error: 'Cannot move a slot to a different trip' });
     }
 
-    const targetSlots = await prisma.slot.findMany({
+    // Exclude the moved slot itself: when the move is within the same day it
+    // would otherwise get a second, conflicting sortOrder update that wins.
+    const targetSlots = (await prisma.slot.findMany({
       where: { dayId: targetDayId },
       orderBy: { sortOrder: 'asc' }
-    });
+    })).filter(s => s.id !== req.params.id);
 
-    const insertAt = position !== undefined ? position : targetSlots.length;
+    const requestedPos = Number(position);
+    const insertAt = Number.isInteger(requestedPos)
+      ? Math.max(0, Math.min(requestedPos, targetSlots.length))
+      : targetSlots.length;
 
     const updates = [];
     updates.push(
@@ -253,7 +259,7 @@ router.put('/slots/:id/move', async (req, res, next) => {
       prisma.slot.findMany({ where: { dayId: targetDayId }, orderBy: { sortOrder: 'asc' } }),
     ]);
 
-    const parse = (s) => ({ ...s, data: typeof s.data === 'string' ? JSON.parse(s.data) : s.data });
+    const parse = (s) => ({ ...s, data: safeParseJson(s.data) });
 
     res.json({
       sourceDayId: slot.dayId,
@@ -292,7 +298,7 @@ router.post('/slots/:id/enrich', async (req, res, next) => {
     if (!slot) return res.status(404).json({ error: 'Slot not found' });
     await assertTripAccess(slot.day.tripId, req.user.id);
 
-    const slotData = typeof slot.data === 'string' ? JSON.parse(slot.data) : slot.data;
+    const slotData = safeParseJson(slot.data);
 
     if (slotData.enrichment && !req.body.force) {
       return res.json(slotData.enrichment);
@@ -310,7 +316,7 @@ router.post('/slots/:id/enrich', async (req, res, next) => {
 
     // Find hotel address from the same day for travel time context
     const hotelSlot = slot.day.slots.find(s => s.type === 'HOTEL' && s.id !== slot.id);
-    const hotelData = hotelSlot ? (typeof hotelSlot.data === 'string' ? JSON.parse(hotelSlot.data) : hotelSlot.data) : {};
+    const hotelData = hotelSlot ? safeParseJson(hotelSlot.data) : {};
     const hotelAddress = hotelData.address || '';
 
     // 1. Google Places: photos, rating, reviewCount, address, googleMapsUrl, operatingHours
@@ -431,12 +437,18 @@ Return ONLY valid JSON, no markdown or explanation.`;
       fetchedAt: new Date().toISOString(),
     };
 
-    // Cache enrichment in slot data
-    slotData.enrichment = enrichment;
-    await prisma.slot.update({
-      where: { id: slot.id },
-      data: { data: JSON.stringify(slotData) }
-    });
+    // Cache enrichment in slot data. Re-read the row first: enrichment takes
+    // seconds (Places + Gemini), and writing back the blob we loaded at the
+    // start would clobber any edit the user made in the meantime.
+    const freshSlot = await prisma.slot.findUnique({ where: { id: slot.id } });
+    if (freshSlot) {
+      const freshData = safeParseJson(freshSlot.data);
+      freshData.enrichment = enrichment;
+      await prisma.slot.update({
+        where: { id: slot.id },
+        data: { data: JSON.stringify(freshData) }
+      });
+    }
 
     res.json(enrichment);
   } catch (err) {

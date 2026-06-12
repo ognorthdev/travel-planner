@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { prisma, assertTripAccess } = require('../lib/access');
+const { safeParseJson } = require('../lib/json');
 
 // GET /api/trips/:tripId/days - Get all days for a trip
 router.get('/trips/:tripId/days', async (req, res, next) => {
@@ -21,7 +22,7 @@ router.get('/trips/:tripId/days', async (req, res, next) => {
       ...day,
       slots: day.slots.map(slot => ({
         ...slot,
-        data: typeof slot.data === 'string' ? JSON.parse(slot.data) : slot.data
+        data: safeParseJson(slot.data)
       }))
     }));
 
