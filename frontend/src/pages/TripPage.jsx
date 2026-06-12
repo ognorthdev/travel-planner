@@ -11,7 +11,8 @@ import ResearchBottomPanel from '../components/research/ResearchBottomPanel';
 import ResearchOverlay from '../components/research/ResearchOverlay';
 import SuggestionDetailModal from '../components/research/SuggestionDetailModal';
 import TripSettings from '../components/TripSettings.jsx';
-import TripHeader from '../components/TripHeader.jsx';
+import TripHero from '../components/TripHero.jsx';
+import { tripThemeVars } from '../lib/tripTheme.js';
 import ShareModal from '../components/ShareModal.jsx';
 import SlotCard from '../components/SlotCard.jsx';
 import SLOT_CONFIG from '../config/slotTypes.js';
@@ -107,13 +108,15 @@ function DayColumn({ day, tripId, onDeleteSlot, onDeleteDay, onReorderSlots, onM
       onDragEnd={handleDragEnd}
     >
       {/* Day Header */}
-      <div className="bg-gradient-to-r from-ocean-600 to-teal-600 p-4 text-white relative">
+      <div className="trip-grad p-4 text-white relative">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-ocean-100 text-xs font-semibold uppercase tracking-widest">
-              Day {day.dayNumber}
+          <div className="min-w-0">
+            <p className="text-white/70 text-[10px] font-semibold uppercase tracking-[0.25em]">
+              {formatDate(day.date)}
             </p>
-            <p className="font-bold text-lg mt-0.5">{formatDate(day.date)}</p>
+            <p className="font-display font-semibold text-2xl leading-none mt-0.5">
+              {String(day.dayNumber).padStart(2, '0')}
+            </p>
           </div>
           <div className="flex items-center gap-1.5">
             <button
@@ -485,10 +488,10 @@ export default function TripPage() {
   }
 
   return (
-    <div className="h-screen bg-slate-900 flex flex-col overflow-hidden">
+    <div className="h-screen atmosphere grain flex flex-col overflow-hidden" style={tripThemeVars(trip?.destination)}>
       {/* Header */}
-      <TripHeader
-        trip={trip}
+      <TripHero
+        trip={trip ? { ...trip, days } : trip}
         tripId={tripId}
         onBack={() => navigate('/')}
         onAddDay={handleAddDay}

@@ -55,6 +55,64 @@ export default function SlotCard({ slot, dayId, tripId, onDelete, index, isDragg
     }
   };
 
+  // Photo-banner variant: filled day-plan slots with an enrichment photo lead
+  // with the image, like the rest of the destination-forward UI.
+  if (!compact && thumbnailUrl) {
+    return (
+      <div
+        draggable
+        onDragStart={handleDragStart}
+        onClick={handleClick}
+        className={`group relative rounded-xl border ${config.border} overflow-hidden cursor-pointer hover:shadow-lg hover:shadow-black/40 transition-all duration-200 hover:-translate-y-0.5 ${isDragging ? 'opacity-40 scale-95' : ''}`}
+      >
+        <div className="relative h-20">
+          <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-transparent" />
+          <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+            <span className={`flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-slate-950/60 backdrop-blur-sm ${config.color}`}>
+              <Icon size={9} />
+              {config.label}
+            </span>
+          </div>
+          <div className="absolute top-1.5 right-1.5 cursor-grab active:cursor-grabbing text-white/50 hover:text-white/90 transition-colors" onClick={(e) => e.stopPropagation()}>
+            <GripVertical size={13} />
+          </div>
+          <div className="absolute bottom-1.5 left-2 right-2">
+            <p className="text-xs font-semibold text-white truncate text-shadow-hero">{preview}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              {time && (
+                <span className="flex items-center gap-0.5 text-[10px] text-slate-200/90">
+                  <Clock size={9} />
+                  {formatTime12(time)}
+                </span>
+              )}
+              {slot.data?.bookingStatus === 'booked' && (
+                <span className="flex items-center gap-0.5 text-[10px] text-emerald-300" title={slot.data?.confirmationNumber ? `Booked · ${slot.data.confirmationNumber}` : 'Booked'}>
+                  <CheckCircle2 size={9} />
+                  Booked
+                </span>
+              )}
+              {slot.data?.bookingStatus === 'needs-booking' && (
+                <span className="flex items-center gap-0.5 text-[10px] text-amber-300" title="Needs booking">
+                  <CircleAlert size={9} />
+                  To book
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        {onDelete && (
+          <button
+            onClick={handleDeleteClick}
+            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full hidden group-hover:flex items-center justify-center shadow-md hover:bg-red-600 transition-colors z-10"
+          >
+            <X size={10} />
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       draggable
