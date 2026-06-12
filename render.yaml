@@ -35,3 +35,11 @@ services:
       # Set to your Cloudflare Pages URL after the frontend deploys, then redeploy.
       - key: TRUSTED_ORIGINS
         sync: false
+      # Optional: invite emails via Resend; leave blank to disable sending.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
+      # Public frontend origin used in email links.
+      - key: APP_URL
+        sync: false

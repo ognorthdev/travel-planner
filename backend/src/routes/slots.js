@@ -308,7 +308,7 @@ router.post('/slots/:id/enrich', enrichLimiter, async (req, res, next) => {
     const hotelAddress = hotelData.address || '';
 
     // 1. Google Places: photos, rating, reviewCount, address, googleMapsUrl, operatingHours
-    let placesResult = { photos: [], rating: null, reviewCount: null, address: existingAddress, googleMapsUrl: null, operatingHours: null, city: null };
+    let placesResult = { photos: [], rating: null, reviewCount: null, address: existingAddress, googleMapsUrl: null, operatingHours: null, city: null, lat: null, lng: null };
     if (GOOGLE_MAPS_API_KEY && GOOGLE_MAPS_API_KEY !== 'your_google_maps_api_key_here') {
       try {
         const query = `${name} ${existingAddress || destination}`.trim();
@@ -317,7 +317,7 @@ router.post('/slots/:id/enrich', enrichLimiter, async (req, res, next) => {
           headers: {
             'Content-Type': 'application/json',
             'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-            'X-Goog-FieldMask': 'places.id,places.photos,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.currentOpeningHours,places.addressComponents',
+            'X-Goog-FieldMask': 'places.id,places.photos,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.currentOpeningHours,places.addressComponents,places.location',
           },
           body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
         });
@@ -337,6 +337,8 @@ router.post('/slots/:id/enrich', enrichLimiter, async (req, res, next) => {
             placesResult.reviewCount = place.userRatingCount || null;
             placesResult.address = place.formattedAddress || existingAddress;
             placesResult.googleMapsUrl = place.googleMapsUri || null;
+            placesResult.lat = place.location?.latitude ?? null;
+            placesResult.lng = place.location?.longitude ?? null;
             const components = place.addressComponents || [];
             const locality = components.find(c => c.types?.includes('locality'));
             const adminArea = components.find(c => c.types?.includes('administrative_area_level_1'));

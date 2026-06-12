@@ -15,6 +15,9 @@ const PLACES_PRICING = {
   'autocomplete': 0.283,
   'place-details': 1.7,
   'photo-media': 0.7,
+  // Routes API: Essentials (drive/walk) $5/1k, Advanced (transit) $10/1k.
+  'route-essentials': 0.5,
+  'route-advanced': 1.0,
 };
 
 function calculateTokenCost(model, inputTokens, outputTokens) {

@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const { prisma, assertTripAccess } = require('../lib/access');
 const { safeParseJson } = require('../lib/json');
+const { sendTripInvite } = require('../lib/email');
 
 // GET /api/trips - Get all trips
 router.get('/', async (req, res, next) => {
@@ -279,7 +281,40 @@ router.post('/:id/members', async (req, res, next) => {
       create: { tripId: req.params.id, email: lower, userId: existing?.userId || null, role: normalizedRole },
     });
 
-    res.status(201).json({ id: member.id, email: member.email, role: member.role, joined: !!member.userId });
+    // Tell the invitee. Optional (no-op without RESEND_API_KEY) and never
+    // blocks the invite itself.
+    const trip = await prisma.trip.findUnique({ where: { id: req.params.id }, select: { name: true } });
+    const emailResult = await sendTripInvite({
+      to: lower,
+      inviterEmail: req.user.email,
+      tripName: trip?.name || 'a trip',
+      role: normalizedRole,
+    });
+
+    res.status(201).json({ id: member.id, email: member.email, role: member.role, joined: !!member.userId, emailSent: emailResult.sent });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/trips/:id/share - enable (or rotate) the public read-only link (owner only)
+router.post('/:id/share', async (req, res, next) => {
+  try {
+    await assertTripAccess(req.params.id, req.user.id, { requireOwner: true });
+    const shareToken = crypto.randomBytes(24).toString('base64url');
+    await prisma.trip.update({ where: { id: req.params.id }, data: { shareToken } });
+    res.json({ shareToken });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/trips/:id/share - disable the public link (owner only)
+router.delete('/:id/share', async (req, res, next) => {
+  try {
+    await assertTripAccess(req.params.id, req.user.id, { requireOwner: true });
+    await prisma.trip.update({ where: { id: req.params.id }, data: { shareToken: null } });
+    res.json({ shareToken: null });
   } catch (err) {
     next(err);
   }

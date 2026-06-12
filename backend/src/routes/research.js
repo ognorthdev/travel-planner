@@ -397,6 +397,64 @@ router.put('/:tripId/ideas/reorder', async (req, res, next) => {
   }
 });
 
+// GET /api/research/:tripId/messages — persisted chat history
+router.get('/:tripId/messages', async (req, res, next) => {
+  try {
+    await assertTripAccess(req.params.tripId, req.user.id);
+    const messages = await prisma.chatMessage.findMany({
+      where: { tripId: req.params.tripId },
+      // cuid is a monotonic tie-break for messages created in the same ms
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: 500,
+    });
+    res.json(messages);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/research/:tripId/messages — append messages (single or array)
+router.post('/:tripId/messages', async (req, res, next) => {
+  try {
+    await assertTripAccess(req.params.tripId, req.user.id, { write: true });
+    const incoming = Array.isArray(req.body.messages) ? req.body.messages : [req.body];
+    const valid = incoming.filter(m =>
+      m && (m.role === 'user' || m.role === 'assistant') &&
+      typeof m.content === 'string' && m.content.length > 0 && m.content.length <= 100000
+    );
+    if (valid.length === 0) {
+      return res.status(400).json({ error: 'messages must have role (user|assistant) and non-empty content' });
+    }
+    // createMany doesn't return rows; create sequentially so createdAt ordering
+    // matches the conversation order even within the same millisecond batch.
+    const saved = [];
+    for (const m of valid) {
+      saved.push(await prisma.chatMessage.create({
+        data: {
+          tripId: req.params.tripId,
+          role: m.role,
+          content: m.content,
+          mode: typeof m.mode === 'string' ? m.mode : null,
+        },
+      }));
+    }
+    res.status(201).json(saved);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/research/:tripId/messages — clear the chat history
+router.delete('/:tripId/messages', async (req, res, next) => {
+  try {
+    await assertTripAccess(req.params.tripId, req.user.id, { write: true });
+    await prisma.chatMessage.deleteMany({ where: { tripId: req.params.tripId } });
+    res.json({ message: 'Chat history cleared' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/research/:tripId/summary
 router.get('/:tripId/summary', async (req, res, next) => {
   try {

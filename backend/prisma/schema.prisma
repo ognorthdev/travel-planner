@@ -20,9 +20,12 @@ model Trip {
   modelConfig          String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+  // Public read-only share link token; null = sharing disabled.
+  shareToken           String?  @unique
   days                 Day[]
   ideas                Idea[]
   chatSummary          ChatSummary?
+  chatMessages         ChatMessage[]
   apiCosts             ApiCost[]
   members              TripMember[]
   // Creator/owner = Supabase Auth user id (UUID from the JWT `sub` claim).
@@ -109,6 +112,21 @@ model Idea {
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+}
+
+// Persisted research-chat history, so conversations survive reloads and are
+// shared across devices/collaborators. ChatSummary remains the condensed
+// recap; these are the raw messages.
+model ChatMessage {
+  id        String   @id @default(cuid())
+  tripId    String
+  role      String   // user | assistant
+  content   String
+  mode      String?  // web | maps | scraper
+  createdAt DateTime @default(now())
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, createdAt])
 }
 
 model ChatSummary {

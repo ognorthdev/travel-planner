@@ -6,6 +6,7 @@ const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 const EMPTY_ENRICHMENT = {
   photos: [], rating: null, reviewCount: null, address: null,
   googleMapsUrl: null, phoneNumber: null, openingHours: null,
+  lat: null, lng: null,
 };
 
 // Shared by every route that turns Places photo references into URLs. The API
@@ -45,7 +46,7 @@ async function fetchEnrichment(name, address) {
     headers: {
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-      'X-Goog-FieldMask': 'places.id,places.photos,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.nationalPhoneNumber,places.regularOpeningHours',
+      'X-Goog-FieldMask': 'places.id,places.photos,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.nationalPhoneNumber,places.regularOpeningHours,places.location',
     },
     body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
   });
@@ -67,6 +68,8 @@ async function fetchEnrichment(name, address) {
       googleMapsUrl: place.googleMapsUri || null,
       phoneNumber: place.nationalPhoneNumber || null,
       openingHours: place.regularOpeningHours?.weekdayDescriptions || null,
+      lat: place.location?.latitude ?? null,
+      lng: place.location?.longitude ?? null,
     },
     ops,
     found: true,

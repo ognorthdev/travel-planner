@@ -10,6 +10,7 @@ const placesRouter = require('./routes/places');
 const researchRouter = require('./routes/research');
 const costsRouter = require('./routes/costs');
 const adminRouter = require('./routes/admin');
+const publicRouter = require('./routes/public');
 const { requireAuth, requireApproved, requireAdmin } = require('./middleware/requireAuth');
 const { prisma } = require('./lib/access');
 
@@ -37,6 +38,9 @@ app.use(express.json());
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Public share-link routes — no auth; reads are gated by unguessable tokens.
+app.use('/api/public', publicRouter);
 
 // Current user's account status (reachable while pending, so the UI can show
 // the awaiting-approval screen). Must be registered before the broad mounts.
