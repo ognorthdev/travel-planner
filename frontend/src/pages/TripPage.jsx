@@ -362,25 +362,38 @@ export default function TripPage() {
       ? { activityName: payload.name, description: payload.description, ...data }
       : { restaurantName: payload.name, description: payload.description, ...data };
 
+    // Optimistic: show the slot in the day and pull the idea out of the panel
+    // immediately; the server calls reconcile (or revert) in the background.
+    const tempId = `temp-${Date.now()}`;
+    const removedIdea = payload.ideaId ? savedIdeas.find(i => i.id === payload.ideaId) : null;
+    setDays(prev => prev.map(day => {
+      if (day.id !== dayId) return day;
+      const slots = [...(day.slots || [])];
+      slots.splice(position, 0, { id: tempId, type: payload.type, data: slotData });
+      return { ...day, slots };
+    }));
+    if (payload.ideaId) setSavedIdeas(prev => prev.filter(i => i.id !== payload.ideaId));
+
     try {
       const newSlot = await slotsApi.create(dayId, {
         type: payload.type,
         sortOrder: position,
         data: slotData,
       });
-      const targetDay = days.find(d => d.id === dayId);
-      const currentSlots = [...(targetDay?.slots || [])];
-      currentSlots.splice(position, 0, newSlot);
       setDays(prev => prev.map(day =>
-        day.id === dayId ? { ...day, slots: currentSlots } : day
+        day.id === dayId
+          ? { ...day, slots: (day.slots || []).map(s => (s.id === tempId ? newSlot : s)) }
+          : day
       ));
-      await slotsApi.reorder(dayId, currentSlots.map(s => s.id));
-      if (payload.ideaId) {
-        await researchApi.deleteIdea(payload.ideaId);
-        setSavedIdeas(prev => prev.filter(i => i.id !== payload.ideaId));
-      }
+      const targetDay = days.find(d => d.id === dayId);
+      const orderedSlots = [...(targetDay?.slots || [])];
+      orderedSlots.splice(position, 0, newSlot);
+      await slotsApi.reorder(dayId, orderedSlots.map(s => s.id));
+      if (payload.ideaId) await researchApi.deleteIdea(payload.ideaId);
     } catch (err) {
       console.error('Failed to create slot from idea:', err);
+      if (removedIdea) setSavedIdeas(prev => [...prev, removedIdea]);
+      loadTripData();
     }
   };
 
@@ -390,22 +403,31 @@ export default function TripPage() {
     const ideaTypes = ['ACTIVITY', 'BREAKFAST', 'LUNCH', 'DINNER'];
     if (!ideaTypes.includes(payload.type) || !payload.name) return;
     const data = typeof payload.data === 'string' ? JSON.parse(payload.data) : (payload.data || {});
+    const description = payload.description || data.description || '';
+
+    // Optimistic: pull the slot off the day and show the idea immediately; the
+    // temp idea is swapped for the persisted one when the server responds.
+    const tempId = `temp-${Date.now()}`;
+    setSavedIdeas(prev => [...prev, { id: tempId, type: payload.type, name: payload.name, description, data }]);
+    setDays(prev => prev.map(d =>
+      d.id === payload.sourceDayId
+        ? { ...d, slots: (d.slots || []).filter(s => s.id !== payload.slotId) }
+        : d
+    ));
+
     try {
       const saved = await researchApi.saveIdea(tripId, {
         type: payload.type,
         name: payload.name,
-        description: payload.description || data.description || '',
+        description,
         data,
       });
-      setSavedIdeas(prev => [...prev, saved]);
+      setSavedIdeas(prev => prev.map(i => (i.id === tempId ? saved : i)));
       await slotsApi.delete(payload.slotId);
-      setDays(prev => prev.map(d =>
-        d.id === payload.sourceDayId
-          ? { ...d, slots: (d.slots || []).filter(s => s.id !== payload.slotId) }
-          : d
-      ));
     } catch (err) {
       console.error('Failed to move slot back to ideas:', err);
+      setSavedIdeas(prev => prev.filter(i => i.id !== tempId));
+      loadTripData();
     }
   };
 
