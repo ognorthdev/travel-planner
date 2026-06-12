@@ -4,6 +4,8 @@ const crypto = require('crypto');
 const { prisma, assertTripAccess } = require('../lib/access');
 const { safeParseJson } = require('../lib/json');
 const { sendTripInvite } = require('../lib/email');
+const { fetchDestinationCover } = require('../enrichment');
+const { recordCost, calculatePlacesCost } = require('../costs');
 
 // GET /api/trips - Get all trips
 router.get('/', async (req, res, next) => {
@@ -99,6 +101,20 @@ router.post('/', async (req, res, next) => {
       }
       return created;
     });
+
+    // No cover provided → fetch a destination hero photo so every trip gets
+    // imagery from day one. Best-effort: a Places hiccup never fails creation.
+    if (!coverImageUrl) {
+      try {
+        const cover = await fetchDestinationCover(destination);
+        if (cover) {
+          await prisma.trip.update({ where: { id: trip.id }, data: { coverImageUrl: cover.url } });
+          recordCost({ tripId: trip.id, service: 'google-places', operation: 'cover-photo', costCents: calculatePlacesCost(cover.ops) });
+        }
+      } catch (e) {
+        console.error('Cover photo fetch failed:', e.message);
+      }
+    }
 
     const fullTrip = await prisma.trip.findUnique({
       where: { id: trip.id },

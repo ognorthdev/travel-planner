@@ -76,4 +76,31 @@ async function fetchEnrichment(name, address) {
   };
 }
 
-module.exports = { fetchEnrichment, resolvePhotoUrls, EMPTY_ENRICHMENT, GOOGLE_MAPS_API_KEY };
+// Fetch a single scenic hero photo for a destination (used as the trip cover
+// when the user doesn't set one). Returns { url, ops } or null.
+async function fetchDestinationCover(destination) {
+  if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === 'your_google_maps_api_key_here') return null;
+  const ops = [{ type: 'text-search', count: 1 }];
+  const searchRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
+      'X-Goog-FieldMask': 'places.photos',
+    },
+    body: JSON.stringify({ textQuery: destination, maxResultCount: 1 }),
+  });
+  if (!searchRes.ok) return null;
+  const photo = (await searchRes.json()).places?.[0]?.photos?.[0];
+  if (!photo) return null;
+
+  ops.push({ type: 'photo-media', count: 1 });
+  // Hero-sized: wide enough for full-bleed headers without being wasteful.
+  const mediaUrl = `https://places.googleapis.com/v1/${photo.name}/media?maxWidthPx=1600&maxHeightPx=1000&skipHttpRedirect=true`;
+  const resp = await fetch(mediaUrl, { headers: { 'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY } });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  return data.photoUri ? { url: data.photoUri, ops } : null;
+}
+
+module.exports = { fetchEnrichment, resolvePhotoUrls, fetchDestinationCover, EMPTY_ENRICHMENT, GOOGLE_MAPS_API_KEY };
