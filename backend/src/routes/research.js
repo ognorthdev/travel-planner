@@ -277,7 +277,7 @@ router.get('/:tripId/ideas', async (req, res, next) => {
 // POST /api/research/:tripId/ideas
 router.post('/:tripId/ideas', async (req, res, next) => {
   try {
-    await assertTripAccess(req.params.tripId, req.user.id);
+    await assertTripAccess(req.params.tripId, req.user.id, { write: true });
     const { type, name, description, data } = req.body;
     if (!type || !name) {
       return res.status(400).json({ error: 'type and name are required' });
@@ -316,7 +316,8 @@ router.post('/ideas/:id/enrich', async (req, res, next) => {
     if (!idea) {
       return res.status(404).json({ error: 'Idea not found' });
     }
-    await assertTripAccess(idea.tripId, req.user.id);
+    // write: enrichment spends Places budget and persists onto the idea
+    await assertTripAccess(idea.tripId, req.user.id, { write: true });
     const data = safeParseJson(idea.data);
 
     if (data.enrichment && !req.body.force) {
@@ -344,7 +345,7 @@ router.delete('/ideas/:id', async (req, res, next) => {
     if (!idea) {
       return res.status(404).json({ error: 'Idea not found' });
     }
-    await assertTripAccess(idea.tripId, req.user.id);
+    await assertTripAccess(idea.tripId, req.user.id, { write: true });
     await prisma.idea.delete({ where: { id: req.params.id } });
     res.json({ message: 'Idea deleted' });
   } catch (err) {
@@ -355,7 +356,7 @@ router.delete('/ideas/:id', async (req, res, next) => {
 // PUT /api/research/:tripId/ideas/reorder
 router.put('/:tripId/ideas/reorder', async (req, res, next) => {
   try {
-    await assertTripAccess(req.params.tripId, req.user.id);
+    await assertTripAccess(req.params.tripId, req.user.id, { write: true });
     const { ideaIds } = req.body;
     if (!Array.isArray(ideaIds)) {
       return res.status(400).json({ error: 'ideaIds array is required' });
@@ -407,7 +408,7 @@ router.get('/:tripId/summary', async (req, res, next) => {
 // PUT /api/research/:tripId/summary
 router.put('/:tripId/summary', async (req, res, next) => {
   try {
-    await assertTripAccess(req.params.tripId, req.user.id);
+    await assertTripAccess(req.params.tripId, req.user.id, { write: true });
     const { summary } = req.body;
     if (!summary) {
       return res.status(400).json({ error: 'summary is required' });
@@ -427,7 +428,8 @@ router.put('/:tripId/summary', async (req, res, next) => {
 // POST /api/research/:tripId/extract — re-extract idea cards from a single message's text
 router.post('/:tripId/extract', async (req, res, next) => {
   try {
-    await assertTripAccess(req.params.tripId, req.user.id);
+    // write: extraction runs a paid model call
+    await assertTripAccess(req.params.tripId, req.user.id, { write: true });
     const { text, destination } = req.body;
     if (!text || !destination) {
       return res.status(400).json({ error: 'text and destination are required' });
@@ -447,9 +449,10 @@ router.post('/:tripId/stream', async (req, res) => {
     return res.status(400).json({ error: 'query and destination are required' });
   }
 
-  // Verify access before switching to the SSE response.
+  // Verify access before switching to the SSE response. write: research
+  // streams run paid model calls.
   try {
-    await assertTripAccess(req.params.tripId, req.user.id);
+    await assertTripAccess(req.params.tripId, req.user.id, { write: true });
   } catch (err) {
     return res.status(err.status || 403).json({ error: err.message || 'Forbidden' });
   }

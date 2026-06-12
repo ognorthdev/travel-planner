@@ -240,10 +240,11 @@ Return ONLY valid JSON, no markdown, no code fences:
 router.post('/discover', async (req, res, next) => {
   try {
     const { location, slotType, description, destination, excludeNames, tripId } = req.body;
-    if (!location || !slotType || !destination) {
-      return res.status(400).json({ error: 'location, slotType, and destination are required' });
+    if (!location || !slotType || !destination || !tripId) {
+      return res.status(400).json({ error: 'location, slotType, destination, and tripId are required' });
     }
-    if (tripId) await assertTripAccess(tripId, req.user.id);
+    // tripId is mandatory so every paid call is access-checked and metered.
+    await assertTripAccess(tripId, req.user.id, { write: true });
 
     if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === 'your_google_maps_api_key_here') {
       return res.status(501).json({ error: 'Google Maps API key not configured' });

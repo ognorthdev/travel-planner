@@ -35,7 +35,7 @@ router.get('/trips/:tripId/days', async (req, res, next) => {
 // POST /api/trips/:tripId/days - Create a new day for a trip
 router.post('/trips/:tripId/days', async (req, res, next) => {
   try {
-    await assertTripAccess(req.params.tripId, req.user.id);
+    await assertTripAccess(req.params.tripId, req.user.id, { write: true });
     const trip = await prisma.trip.findUnique({ where: { id: req.params.tripId } });
     if (!trip) {
       return res.status(404).json({ error: 'Trip not found' });
@@ -85,7 +85,7 @@ router.delete('/days/:id', async (req, res, next) => {
     if (!day) {
       return res.status(404).json({ error: 'Day not found' });
     }
-    await assertTripAccess(day.tripId, req.user.id);
+    await assertTripAccess(day.tripId, req.user.id, { write: true });
 
     await prisma.day.delete({ where: { id: req.params.id } });
     res.json({ message: 'Day deleted successfully' });

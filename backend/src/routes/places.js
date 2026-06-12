@@ -26,8 +26,11 @@ async function resolvePhotoUrls(photoRefs) {
 // POST /api/places/autocomplete
 router.post('/autocomplete', async (req, res, next) => {
   try {
-    if (req.body.tripId) await assertTripAccess(req.body.tripId, req.user.id);
-    const { input, locationBias } = req.body;
+    const { input, locationBias, tripId: bodyTripId } = req.body;
+    if (!bodyTripId) {
+      return res.status(400).json({ error: 'tripId is required' });
+    }
+    await assertTripAccess(bodyTripId, req.user.id, { write: true });
     if (!input || input.trim().length < 2) {
       return res.json({ predictions: [] });
     }
@@ -89,7 +92,10 @@ router.post('/autocomplete', async (req, res, next) => {
 // GET /api/places/photos?name=...&address=...&placeId=...
 router.get('/photos', async (req, res, next) => {
   try {
-    if (req.query.tripId) await assertTripAccess(req.query.tripId, req.user.id);
+    if (!req.query.tripId) {
+      return res.status(400).json({ error: 'tripId is required' });
+    }
+    await assertTripAccess(req.query.tripId, req.user.id);
     if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === 'your_google_maps_api_key_here') {
       return res.json({ photos: [] });
     }
@@ -167,7 +173,10 @@ router.get('/photos', async (req, res, next) => {
 // GET /api/places/details/:placeId
 router.get('/details/:placeId', async (req, res, next) => {
   try {
-    if (req.query.tripId) await assertTripAccess(req.query.tripId, req.user.id);
+    if (!req.query.tripId) {
+      return res.status(400).json({ error: 'tripId is required' });
+    }
+    await assertTripAccess(req.query.tripId, req.user.id, { write: true });
     if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === 'your_google_maps_api_key_here') {
       return res.status(501).json({ error: 'Google Maps API key not configured' });
     }
@@ -211,7 +220,10 @@ router.get('/details/:placeId', async (req, res, next) => {
 router.post('/enrich', async (req, res, next) => {
   try {
     const { name, address, tripId } = req.body;
-    if (tripId) await assertTripAccess(tripId, req.user.id);
+    if (!tripId) {
+      return res.status(400).json({ error: 'tripId is required' });
+    }
+    await assertTripAccess(tripId, req.user.id, { write: true });
     if (!name) return res.json({ photos: [], rating: null, reviewCount: null });
 
     const { value, ops } = await fetchEnrichment(name, address);

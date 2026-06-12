@@ -65,7 +65,7 @@ router.post('/days/:dayId/slots', async (req, res, next) => {
     if (!day) {
       return res.status(404).json({ error: 'Day not found' });
     }
-    await assertTripAccess(day.tripId, req.user.id);
+    await assertTripAccess(day.tripId, req.user.id, { write: true });
 
     const { type, sortOrder, data } = req.body;
 
@@ -132,7 +132,7 @@ router.put('/slots/:id', async (req, res, next) => {
     if (!slot) {
       return res.status(404).json({ error: 'Slot not found' });
     }
-    await assertTripAccess(await tripIdForSlot(req.params.id), req.user.id);
+    await assertTripAccess(await tripIdForSlot(req.params.id), req.user.id, { write: true });
 
     const { type, sortOrder, data } = req.body;
 
@@ -165,7 +165,7 @@ router.put('/days/:dayId/slots/reorder', async (req, res, next) => {
     if (!day) {
       return res.status(404).json({ error: 'Day not found' });
     }
-    await assertTripAccess(day.tripId, req.user.id);
+    await assertTripAccess(day.tripId, req.user.id, { write: true });
 
     const { slotIds } = req.body;
     if (!Array.isArray(slotIds)) {
@@ -210,7 +210,7 @@ router.put('/slots/:id/move', async (req, res, next) => {
       return res.status(404).json({ error: 'Slot not found' });
     }
     const sourceTripId = await tripIdForSlot(req.params.id);
-    await assertTripAccess(sourceTripId, req.user.id);
+    await assertTripAccess(sourceTripId, req.user.id, { write: true });
 
     const { targetDayId, position } = req.body;
     if (!targetDayId) {
@@ -221,7 +221,7 @@ router.put('/slots/:id/move', async (req, res, next) => {
     if (!targetDay) {
       return res.status(404).json({ error: 'Target day not found' });
     }
-    await assertTripAccess(targetDay.tripId, req.user.id);
+    await assertTripAccess(targetDay.tripId, req.user.id, { write: true });
     if (targetDay.tripId !== sourceTripId) {
       return res.status(400).json({ error: 'Cannot move a slot to a different trip' });
     }
@@ -279,7 +279,7 @@ router.delete('/slots/:id', async (req, res, next) => {
     if (!slot) {
       return res.status(404).json({ error: 'Slot not found' });
     }
-    await assertTripAccess(await tripIdForSlot(req.params.id), req.user.id);
+    await assertTripAccess(await tripIdForSlot(req.params.id), req.user.id, { write: true });
 
     await prisma.slot.delete({ where: { id: req.params.id } });
     res.json({ message: 'Slot deleted successfully' });
@@ -296,7 +296,8 @@ router.post('/slots/:id/enrich', async (req, res, next) => {
       include: { day: { include: { slots: true, trip: true } } }
     });
     if (!slot) return res.status(404).json({ error: 'Slot not found' });
-    await assertTripAccess(slot.day.tripId, req.user.id);
+    // write: enrichment spends Places/Gemini budget and persists onto the slot
+    await assertTripAccess(slot.day.tripId, req.user.id, { write: true });
 
     const slotData = safeParseJson(slot.data);
 

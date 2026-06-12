@@ -158,8 +158,8 @@ router.put('/:id', async (req, res, next) => {
   try {
     const { name, destination, startDate, endDate, coverImageUrl, mealPreferences, activityPreferences, researchContext, modelConfig } = req.body;
 
-    // any collaborator may edit trip details
-    await assertTripAccess(req.params.id, req.user.id);
+    // any OWNER/EDITOR collaborator may edit trip details; viewers are read-only
+    await assertTripAccess(req.params.id, req.user.id, { write: true });
 
     if ((startDate && Number.isNaN(new Date(startDate).getTime())) ||
         (endDate && Number.isNaN(new Date(endDate).getTime()))) {
