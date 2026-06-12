@@ -50,10 +50,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
-      <div className="w-full max-w-sm bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-xl">
-        <h1 className="text-2xl font-semibold text-slate-100 mb-1">Travel Planner</h1>
-        <p className="text-slate-400 text-sm mb-6">
+    <div className="min-h-screen relative flex items-center justify-center px-4 overflow-hidden bg-slate-950">
+      {/* Full-bleed destination backdrop */}
+      <img
+        src="https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=2000&q=70"
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover animate-ken-burns"
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-slate-950/70 to-slate-950/90" />
+
+      <div className="relative w-full max-w-sm glass rounded-2xl p-8 shadow-2xl shadow-black/50">
+        <p className="text-[10px] font-bold uppercase tracking-[0.35em] text-slate-300/80 mb-1">Your travel atlas</p>
+        <h1 className="font-display font-semibold text-3xl text-white mb-1">Travel Planner</h1>
+        <p className="text-slate-300/80 text-sm mb-6">
           {mode === 'signin' ? 'Sign in to your trips' : 'Create your account'}
         </p>
 
@@ -67,7 +76,7 @@ export default function LoginPage() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg bg-slate-900 border border-slate-700 text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg bg-slate-950/60 border border-white/15 text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-400/70"
             />
           </div>
 
@@ -81,7 +90,7 @@ export default function LoginPage() {
               autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg bg-slate-900 border border-slate-700 text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg bg-slate-950/60 border border-white/15 text-slate-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-400/70"
             />
             {mode === 'signup' && (
               <p className="text-xs text-slate-500 mt-1">At least 8 characters.</p>
@@ -102,7 +111,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-medium py-2 transition-colors"
+            className="w-full rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-60 text-white font-medium py-2 transition-colors"
           >
             {submitting ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>

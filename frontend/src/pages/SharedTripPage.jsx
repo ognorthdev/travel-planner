@@ -4,6 +4,7 @@ import { MapPin, Calendar, Clock, Phone, Loader2, Footprints, TramFront, Car, Ch
 import { publicApi } from '../api/index.js';
 import SLOT_CONFIG from '../config/slotTypes.js';
 import { formatTime12 } from '../utils/time.js';
+import { tripThemeVars } from '../lib/tripTheme.js';
 
 function parseLocalDate(dateStr) {
   return new Date(dateStr.slice(0, 10) + 'T00:00:00');
@@ -61,17 +62,18 @@ export default function SharedTripPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 pb-16">
+    <div className="min-h-screen atmosphere grain pb-16" style={tripThemeVars(trip.destination)}>
       {/* Cover header */}
-      <div className="relative h-44 sm:h-56 overflow-hidden">
+      <div className="relative h-52 sm:h-64 overflow-hidden">
         {trip.coverImageUrl ? (
-          <img src={trip.coverImageUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+          <img src={trip.coverImageUrl} alt="" className="w-full h-full object-cover animate-ken-burns" referrerPolicy="no-referrer" />
         ) : (
-          <div className="w-full h-full bg-gradient-to-r from-ocean-600 to-teal-600" />
+          <div className="w-full h-full trip-grad" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 p-5 max-w-2xl mx-auto">
-          <h1 className="text-2xl sm:text-3xl font-bold text-white">{trip.name}</h1>
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-glow text-shadow-hero">{trip.destination}</p>
+          <h1 className="font-display font-semibold text-3xl sm:text-4xl text-white text-shadow-hero">{trip.name}</h1>
           <div className="flex items-center gap-4 text-sm text-slate-300 mt-1">
             <span className="flex items-center gap-1"><MapPin size={13} className="text-teal-400" />{trip.destination}</span>
             <span className="flex items-center gap-1">
@@ -88,9 +90,11 @@ export default function SharedTripPage() {
       <div className="max-w-2xl mx-auto px-4 mt-6 space-y-6">
         {trip.days.map((day) => (
           <div key={day.id} className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
-            <div className="bg-gradient-to-r from-ocean-600 to-teal-600 px-4 py-3">
-              <p className="text-ocean-100 text-[10px] font-semibold uppercase tracking-widest">Day {day.dayNumber}</p>
-              <p className="font-bold text-white">
+            <div className="trip-grad px-4 py-3 flex items-baseline gap-3">
+              <span className="font-display font-semibold text-3xl text-white leading-none">
+                {String(day.dayNumber).padStart(2, '0')}
+              </span>
+              <p className="font-semibold text-white/90">
                 {parseLocalDate(day.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               </p>
             </div>

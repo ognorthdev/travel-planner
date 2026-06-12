@@ -504,10 +504,13 @@ export default function TripPage() {
       {/* Horizontal Day Scroll */}
       <div className="flex-1 overflow-hidden">
         {days.length === 0 ? (
-          <div className="flex items-center justify-center h-full min-h-[60vh]">
-            <div className="text-center">
+          <div className="relative flex items-center justify-center h-full min-h-[60vh]">
+            {trip?.coverImageUrl && (
+              <img src={trip.coverImageUrl} alt="" referrerPolicy="no-referrer" className="absolute inset-0 w-full h-full object-cover opacity-[0.07]" />
+            )}
+            <div className="relative text-center">
               <div className="text-6xl mb-4">🗓️</div>
-              <h3 className="text-xl font-bold text-slate-200 mb-2">No days planned yet</h3>
+              <h3 className="font-display text-2xl font-semibold text-slate-200 mb-2">No days planned yet</h3>
               <p className="text-slate-400 mb-6">Add your first day to start planning your trip</p>
               <button onClick={handleAddDay} disabled={addingDay} className="btn-primary mx-auto">
                 {addingDay ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}

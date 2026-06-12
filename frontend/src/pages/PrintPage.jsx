@@ -5,23 +5,9 @@ import { tripsApi } from '../api/index.js';
 import SLOT_CONFIG from '../config/slotTypes.js';
 import { formatTime12 } from '../utils/time.js';
 
-// Destination-inspired palettes. The destination name hashes to one of these,
-// so every trip gets a stable look that feels tied to the place. Colors are
-// chosen to stay legible in grayscale print too.
-const PALETTES = [
-  { name: 'azure',     accent: '#0e7490', soft: '#ecfeff', rule: '#67e8f9', motif: '✈' },  // sea / harbor towns
-  { name: 'terracotta',accent: '#c2410c', soft: '#fff7ed', rule: '#fdba74', motif: '🏛' }, // old cities, warm stone
-  { name: 'forest',    accent: '#15803d', soft: '#f0fdf4', rule: '#86efac', motif: '⛰' },  // mountains, parks
-  { name: 'plum',      accent: '#7e22ce', soft: '#faf5ff', rule: '#d8b4fe', motif: '🌸' },  // gardens, spring trips
-  { name: 'sunset',    accent: '#b45309', soft: '#fffbeb', rule: '#fcd34d', motif: '🌅' },  // deserts, beaches
-  { name: 'midnight',  accent: '#1d4ed8', soft: '#eff6ff', rule: '#93c5fd', motif: '🌃' },  // big cities
-];
-
-function paletteFor(destination) {
-  let h = 0;
-  for (const c of destination || '') h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return PALETTES[h % PALETTES.length];
-}
+// Palettes are shared with the live UI (src/lib/tripTheme.js) so the printed
+// sheet matches the screen for the same destination.
+import { paletteFor } from '../lib/tripTheme.js';
 
 function parseLocalDate(dateStr) {
   return new Date(dateStr.slice(0, 10) + 'T00:00:00');
@@ -99,26 +85,43 @@ export default function PrintPage() {
       </div>
 
       <div className="max-w-3xl mx-auto bg-white shadow-xl print:shadow-none my-6 print:my-0">
-        {/* Cover */}
+        {/* Cover — mirrors the app's TripHero: serif title over the photo */}
         <div style={airmailBorder} />
         <div className="relative">
-          {trip.coverImageUrl && (
-            <img
-              src={trip.coverImageUrl}
-              alt=""
-              className="w-full h-56 object-cover"
-              referrerPolicy="no-referrer"
-              style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
-            />
+          {trip.coverImageUrl ? (
+            <div className="relative">
+              <img
+                src={trip.coverImageUrl}
+                alt=""
+                className="w-full h-64 object-cover"
+                referrerPolicy="no-referrer"
+                style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+              />
+              <div
+                className="absolute inset-0"
+                style={{ background: 'linear-gradient(to top, rgba(12,10,9,0.85), rgba(12,10,9,0.15) 55%, transparent)', printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}
+              />
+              <div className="absolute bottom-0 left-0 right-0 px-8 pb-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.35em] text-white/85">
+                  {palette.motif} {trip.destination}
+                </p>
+                <h1 className="font-display font-semibold text-5xl text-white leading-tight mt-0.5">
+                  {trip.name}
+                </h1>
+              </div>
+            </div>
+          ) : (
+            <div className="px-8 pt-6" style={{ background: palette.soft }}>
+              <p className="text-xs font-bold uppercase tracking-[0.3em]" style={{ color: palette.accent }}>
+                {palette.motif} {trip.destination}
+              </p>
+              <h1 className="font-display font-semibold text-4xl mt-1 text-slate-900">
+                {trip.name}
+              </h1>
+            </div>
           )}
-          <div className="px-8 py-6" style={{ background: palette.soft }}>
-            <p className="text-xs font-bold uppercase tracking-[0.3em]" style={{ color: palette.accent }}>
-              {palette.motif} Itinerary
-            </p>
-            <h1 className="text-4xl font-bold mt-1 text-slate-900" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
-              {trip.name}
-            </h1>
-            <p className="text-slate-600 mt-2 flex items-center gap-4 text-sm">
+          <div className="px-8 py-4" style={{ background: palette.soft }}>
+            <p className="text-slate-600 flex items-center gap-4 text-sm">
               <span className="flex items-center gap-1"><MapPin size={13} style={{ color: palette.accent }} />{trip.destination}</span>
               <span>
                 {start.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
@@ -136,8 +139,8 @@ export default function PrintPage() {
             <section key={day.id} className="px-8 py-6 break-inside-avoid print:break-after-page border-t border-dashed" style={{ borderColor: palette.rule }}>
               <div className="flex items-baseline gap-4 mb-4">
                 <span
-                  className="text-5xl font-bold leading-none"
-                  style={{ color: palette.accent, fontFamily: 'Georgia, "Times New Roman", serif' }}
+                  className="font-display font-semibold text-5xl leading-none"
+                  style={{ color: palette.accent }}
                 >
                   {String(day.dayNumber).padStart(2, '0')}
                 </span>
