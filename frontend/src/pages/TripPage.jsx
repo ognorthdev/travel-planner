@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Loader2,
-  Trash2, X, AlertTriangle, GripVertical
+  Trash2, X, AlertTriangle, GripVertical, Map as MapIcon
 } from 'lucide-react';
 import { tripsApi, daysApi, slotsApi, researchApi } from '../api/index.js';
+import DayMapModal from '../components/DayMapModal.jsx';
+import TravelTimeConnector from '../components/TravelTimeConnector.jsx';
 import ResearchBottomPanel from '../components/research/ResearchBottomPanel';
 import ResearchOverlay from '../components/research/ResearchOverlay';
 import SuggestionDetailModal from '../components/research/SuggestionDetailModal';
@@ -29,7 +31,7 @@ function formatDate(dateStr) {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-function DayColumn({ day, tripId, onDeleteSlot, onDeleteDay, onReorderSlots, onMoveSlot, onResearchDrop, dragState, onDragStateChange }) {
+function DayColumn({ day, tripId, onDeleteSlot, onDeleteDay, onReorderSlots, onMoveSlot, onResearchDrop, dragState, onDragStateChange, onOpenMap }) {
   const [dropIndex, setDropIndex] = useState(null);
 
   const isDragSource = dragState?.sourceDayId === day.id;
@@ -113,13 +115,22 @@ function DayColumn({ day, tripId, onDeleteSlot, onDeleteDay, onReorderSlots, onM
             </p>
             <p className="font-bold text-lg mt-0.5">{formatDate(day.date)}</p>
           </div>
-          <button
-            onClick={() => onDeleteDay(day.id)}
-            className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
-            title="Delete day"
-          >
-            <Trash2 size={13} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => onOpenMap(day.id)}
+              className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
+              title="Day map & travel times"
+            >
+              <MapIcon size={13} />
+            </button>
+            <button
+              onClick={() => onDeleteDay(day.id)}
+              className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
+              title="Delete day"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -131,6 +142,7 @@ function DayColumn({ day, tripId, onDeleteSlot, onDeleteDay, onReorderSlots, onM
               {dropIndex === index && (
                 <div className="h-1 bg-ocean-400 rounded-full mx-2 animate-pulse" />
               )}
+              <TravelTimeConnector slot={slot} prevSlot={index > 0 ? day.slots[index - 1] : null} />
               <div
                 onDragOver={(e) => handleSlotDragOver(e, index)}
                 onDrop={(e) => handleDrop(e, index)}
@@ -215,6 +227,8 @@ export default function TripPage() {
   const [selectedIdea, setSelectedIdea] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [mapDayId, setMapDayId] = useState(null);
+  const [computingTravel, setComputingTravel] = useState(false);
 
   useEffect(() => {
     loadTripData();
@@ -312,6 +326,22 @@ export default function TripPage() {
 
   const handleDragStateChange = (state) => {
     setDragState(state);
+  };
+
+  // Locate slots + compute walk/transit/drive times for a day. The endpoint
+  // geocodes missing coordinates and returns the refreshed slots.
+  const handleComputeTravelTimes = async (dayId) => {
+    setComputingTravel(true);
+    try {
+      const result = await daysApi.travelTimes(dayId);
+      setDays(prev => prev.map(day =>
+        day.id === dayId ? { ...day, slots: result.slots } : day
+      ));
+    } catch (err) {
+      console.error('Failed to compute travel times:', err);
+    } finally {
+      setComputingTravel(false);
+    }
   };
 
   const handleDeleteIdea = async (idea) => {
@@ -499,6 +529,7 @@ export default function TripPage() {
                 onResearchDrop={handleResearchDrop}
                 dragState={dragState}
                 onDragStateChange={handleDragStateChange}
+                onOpenMap={setMapDayId}
               />
             ))}
 
@@ -548,6 +579,18 @@ export default function TripPage() {
             onNext={() => { if (idx >= 0 && idx < savedIdeas.length - 1) setSelectedIdea(savedIdeas[idx + 1]); }}
           />
         );
+      })()}
+
+      {mapDayId && (() => {
+        const mapDay = days.find(d => d.id === mapDayId);
+        return mapDay ? (
+          <DayMapModal
+            day={mapDay}
+            onClose={() => setMapDayId(null)}
+            onComputeTravelTimes={() => handleComputeTravelTimes(mapDayId)}
+            computingTravel={computingTravel}
+          />
+        ) : null;
       })()}
 
       {deleteConfirm && (

@@ -41,7 +41,19 @@ export const tripsApi = {
   getById: (id) => api.get(`/trips/${id}`),
   create: (data) => api.post('/trips', data),
   update: (id, data) => api.put(`/trips/${id}`, data),
-  delete: (id) => api.delete(`/trips/${id}`)
+  delete: (id) => api.delete(`/trips/${id}`),
+  enableShare: (id) => api.post(`/trips/${id}/share`),
+  disableShare: (id) => api.delete(`/trips/${id}/share`),
+};
+
+// Public share-link view (no auth header needed)
+export const publicApi = {
+  getSharedTrip: async (token) => {
+    const resp = await fetch(`${API_BASE}/api/public/trips/${encodeURIComponent(token)}`);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || 'This link is no longer available');
+    return data;
+  },
 };
 
 // Trip collaborators (sharing)
@@ -68,7 +80,8 @@ export const adminApi = {
 export const daysApi = {
   getByTrip: (tripId) => api.get(`/trips/${tripId}/days`),
   create: (tripId, data) => api.post(`/trips/${tripId}/days`, data),
-  delete: (id) => api.delete(`/days/${id}`)
+  delete: (id) => api.delete(`/days/${id}`),
+  travelTimes: (dayId, force) => api.post(`/days/${dayId}/travel-times`, { force: !!force }, { timeout: 120000 }).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
 };
 
 // Slots
@@ -107,6 +120,9 @@ export const researchApi = {
   reorderIdeas: (tripId, ids) => api.put(`/research/${tripId}/ideas/reorder`, { ideaIds: ids }),
   getSummary: (tripId) => api.get(`/research/${tripId}/summary`),
   saveSummary: (tripId, summary) => api.put(`/research/${tripId}/summary`, { summary }),
+  getMessages: (tripId) => api.get(`/research/${tripId}/messages`),
+  saveMessages: (tripId, messages) => api.post(`/research/${tripId}/messages`, { messages }),
+  clearMessages: (tripId) => api.delete(`/research/${tripId}/messages`),
   extract: (tripId, text, destination) => api.post(`/research/${tripId}/extract`, { text, destination }, { timeout: 120000 }).then(r => { window.dispatchEvent(new CustomEvent('cost-updated')); return r; }),
 };
 
