@@ -638,6 +638,7 @@ export default function PlanningPage() {
   const [copyingHotel, setCopyingHotel] = useState(false);
   const [copiedHotel, setCopiedHotel] = useState(false);
   const [copiedHotelCount, setCopiedHotelCount] = useState(0);
+  const [clearedHotelCount, setClearedHotelCount] = useState(0);
 
   const slotType = slot?.type;
   const isHotel = slotType === 'HOTEL';
@@ -684,35 +685,59 @@ export default function PlanningPage() {
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
   }, [formData, slotId]);
 
-  // Copy this hotel's details to the other nights of the stay: days from
-  // check-in (inclusive) up to check-out (exclusive) — no hotel night on the
-  // check-out day itself.
+  // Sync this hotel onto the days of the stay: check-in (inclusive) up to
+  // check-out (exclusive) — no hotel night on the check-out day itself. Days
+  // outside that range holding a copy of this same stay (same hotel + same
+  // dates, e.g. left over from an earlier copy or changed dates) are cleared,
+  // so re-running the sync always repairs the trip.
   const hotelCheckIn = (formData.checkIn || '').slice(0, 10);
   const hotelCheckOut = (formData.checkOut || '').slice(0, 10);
   const hasStayDates = Boolean(hotelCheckIn && hotelCheckOut);
 
-  const handleCopyHotelToStayDates = async () => {
+  const handleSyncHotelToStayDates = async () => {
     if (!trip?.days || !hasStayDates) return;
-    const stayHotelSlots = trip.days
-      .filter(d => {
-        const date = (d.date || '').slice(0, 10);
-        return date >= hotelCheckIn && date < hotelCheckOut;
-      })
-      .flatMap(d => (d.slots || []))
-      .filter(s => s.type === 'HOTEL' && s.id !== slotId);
 
-    if (stayHotelSlots.length === 0) return;
+    const isSameStay = (data) =>
+      data?.hotelName === formData.hotelName &&
+      (data?.checkIn || '').slice(0, 10) === hotelCheckIn &&
+      (data?.checkOut || '').slice(0, 10) === hotelCheckOut;
+
+    const copyTargets = [];
+    const clearTargets = [];
+    let sourceOutOfStay = false;
+    for (const d of trip.days) {
+      const date = (d.date || '').slice(0, 10);
+      const withinStay = date >= hotelCheckIn && date < hotelCheckOut;
+      for (const s of (d.slots || [])) {
+        if (s.type !== 'HOTEL') continue;
+        if (s.id === slotId) {
+          // The slot being edited moves off this day when the day isn't part
+          // of the stay (its data lives on the stay days after the sync).
+          if (!withinStay) sourceOutOfStay = true;
+          continue;
+        }
+        if (withinStay) copyTargets.push(s);
+        else if (isSameStay(s.data)) clearTargets.push(s);
+      }
+    }
+
+    if (copyTargets.length === 0 && clearTargets.length === 0 && !sourceOutOfStay) return;
 
     setCopyingHotel(true);
     try {
-      await Promise.all(
-        stayHotelSlots.map(s => slotsApi.update(s.id, { data: formData }))
-      );
-      setCopiedHotelCount(stayHotelSlots.length);
+      await Promise.all([
+        ...copyTargets.map(s => slotsApi.update(s.id, { data: formData })),
+        ...clearTargets.map(s => slotsApi.update(s.id, { data: {} })),
+        ...(sourceOutOfStay ? [slotsApi.update(slotId, { data: {} })] : []),
+      ]);
+      // The edited slot's own day counts as a stay day when it's in range.
+      setCopiedHotelCount(copyTargets.length + (sourceOutOfStay ? 0 : 1));
+      setClearedHotelCount(clearTargets.length + (sourceOutOfStay ? 1 : 0));
       setCopiedHotel(true);
-      setTimeout(() => setCopiedHotel(false), 3000);
+      setTimeout(() => setCopiedHotel(false), 5000);
+      if (sourceOutOfStay) setFormData({});
     } catch (err) {
-      console.error('Failed to copy hotel to stay dates:', err);
+      console.error('Failed to sync hotel to stay dates:', err);
     } finally {
       setCopyingHotel(false);
     }
@@ -876,8 +901,8 @@ export default function PlanningPage() {
               {trip?.days?.length > 1 && (
                 <div>
                   <button
-                    onClick={handleCopyHotelToStayDates}
-                    disabled={copyingHotel || !formData.hotelName || !hasStayDates}
+                    onClick={handleSyncHotelToStayDates}
+                    disabled={copyingHotel || (!copiedHotel && (!formData.hotelName || !hasStayDates))}
                     className={`w-full border-2 rounded-xl py-3 px-4 font-semibold transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
                       copiedHotel
                         ? 'border-emerald-500/50 bg-emerald-900/20 text-emerald-400'
@@ -885,16 +910,19 @@ export default function PlanningPage() {
                     }`}
                   >
                     {copyingHotel ? (
-                      <><Loader2 size={16} className="animate-spin" />Copying to stay dates...</>
+                      <><Loader2 size={16} className="animate-spin" />Syncing to stay dates...</>
                     ) : copiedHotel ? (
-                      <><Check size={16} />Copied to {copiedHotelCount} other day{copiedHotelCount !== 1 ? 's' : ''} of this stay</>
+                      <><Check size={16} />
+                        Set on {copiedHotelCount} stay day{copiedHotelCount !== 1 ? 's' : ''}
+                        {clearedHotelCount > 0 ? ` · cleared ${clearedHotelCount} day${clearedHotelCount !== 1 ? 's' : ''} outside the stay` : ''}
+                      </>
                     ) : (
-                      <><Copy size={16} />Copy hotel to stay dates</>
+                      <><Copy size={16} />Sync hotel to stay dates</>
                     )}
                   </button>
                   {formData.hotelName && !hasStayDates && (
                     <p className="text-xs text-slate-500 mt-1.5 text-center">
-                      Set check-in and check-out dates to copy this hotel to the other nights of the stay.
+                      Set check-in and check-out dates to sync this hotel onto the nights of the stay.
                     </p>
                   )}
                 </div>
