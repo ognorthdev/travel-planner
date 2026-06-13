@@ -9,11 +9,17 @@ const PRICING = {
   'gemini-3-flash-preview': { inputPerMTok: 50, outputPerMTok: 300 },// $0.50 / $3.00
 };
 
+// Places API (New) bills by the highest field-mask tier a request asks for.
+// IDs-only requests are free; Pro/Enterprise/Enterprise+Atmosphere tiers each
+// have their own rate (and their own free monthly quota since March 2025).
 const PLACES_PRICING = {
-  'text-search': 3.2,
+  'text-search-ids': 0,              // places.id only — free SKU
+  'text-search': 3.2,                // Pro-tier fields ($32/1k)
   'geocode': 3.2,
   'autocomplete': 0.283,
-  'place-details': 1.7,
+  'place-details': 1.7,              // Pro tier ($17/1k)
+  'place-details-enterprise': 2.0,   // + rating, hours, phone ($20/1k)
+  'place-details-atmosphere': 2.5,   // + reviews ($25/1k)
   'photo-media': 0.7,
   // Routes API: Essentials (drive/walk) $5/1k, Advanced (transit) $10/1k.
   'route-essentials': 0.5,

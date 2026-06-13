@@ -109,7 +109,9 @@ router.post('/', async (req, res, next) => {
         const cover = await fetchDestinationCover(destination);
         if (cover) {
           await prisma.trip.update({ where: { id: trip.id }, data: { coverImageUrl: cover.url } });
-          recordCost({ tripId: trip.id, service: 'google-places', operation: 'cover-photo', costCents: calculatePlacesCost(cover.ops) });
+          if (cover.ops.length > 0) {
+            recordCost({ tripId: trip.id, service: 'google-places', operation: 'cover-photo', costCents: calculatePlacesCost(cover.ops) });
+          }
         }
       } catch (e) {
         console.error('Cover photo fetch failed:', e.message);

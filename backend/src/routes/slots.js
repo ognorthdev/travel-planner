@@ -1,12 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { recordCost, calculatePlacesCost } = require('../costs');
-const { resolvePhotoUrls } = require('../enrichment');
+const { fetchEnrichment } = require('../enrichment');
 const { prisma, assertTripAccess, tripIdForSlot } = require('../lib/access');
 const { safeParseJson } = require('../lib/json');
 const { enrichLimiter } = require('../middleware/rateLimit');
-
-const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 let genAI = null;
 try {
@@ -307,67 +305,44 @@ router.post('/slots/:id/enrich', enrichLimiter, async (req, res, next) => {
     const hotelData = hotelSlot ? safeParseJson(hotelSlot.data) : {};
     const hotelAddress = hotelData.address || '';
 
-    // 1. Google Places: photos, rating, reviewCount, address, googleMapsUrl, operatingHours
-    let placesResult = { photos: [], rating: null, reviewCount: null, address: existingAddress, googleMapsUrl: null, operatingHours: null, city: null, lat: null, lng: null };
-    if (GOOGLE_MAPS_API_KEY && GOOGLE_MAPS_API_KEY !== 'your_google_maps_api_key_here') {
-      try {
-        const query = `${name} ${existingAddress || destination}`.trim();
-        const searchRes = await fetch('https://places.googleapis.com/v1/places:searchText', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-            'X-Goog-FieldMask': 'places.id,places.photos,places.rating,places.userRatingCount,places.formattedAddress,places.googleMapsUri,places.currentOpeningHours,places.addressComponents,places.location',
-          },
-          body: JSON.stringify({ textQuery: query, maxResultCount: 1 }),
-        });
-
-        const ops = [{ type: 'text-search', count: 1 }];
-
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          const place = searchData.places?.[0];
-          if (place) {
-            const photoRefs = (place.photos || []).slice(0, 4);
-            if (photoRefs.length > 0) {
-              ops.push({ type: 'photo-media', count: photoRefs.length });
-              placesResult.photos = await resolvePhotoUrls(photoRefs);
-            }
-            placesResult.rating = place.rating || null;
-            placesResult.reviewCount = place.userRatingCount || null;
-            placesResult.address = place.formattedAddress || existingAddress;
-            placesResult.googleMapsUrl = place.googleMapsUri || null;
-            placesResult.lat = place.location?.latitude ?? null;
-            placesResult.lng = place.location?.longitude ?? null;
-            const components = place.addressComponents || [];
-            const locality = components.find(c => c.types?.includes('locality'));
-            const adminArea = components.find(c => c.types?.includes('administrative_area_level_1'));
-            placesResult.city = locality?.longText || adminArea?.longText || null;
-            const hours = place.currentOpeningHours?.weekdayDescriptions;
-            if (hours && hours.length > 0) {
-              placesResult.operatingHours = hours.join('; ');
-            }
-          }
-        }
+    // 1. Google Places via the shared cached pipeline: photos, rating,
+    // reviewCount, actual reviews, address, googleMapsUrl, hours, website.
+    let placesResult = { photos: [], rating: null, reviewCount: null, address: existingAddress, googleMapsUrl: null, operatingHours: null, city: null, lat: null, lng: null, reviews: [], websiteUri: null, placeId: null, photosAvailable: 0 };
+    try {
+      const { value, ops, found } = await fetchEnrichment(name, existingAddress || destination, { force: !!req.body.force });
+      if (ops.length > 0) {
         recordCost({ tripId, service: 'google-places', operation: 'slot-enrich', costCents: calculatePlacesCost(ops) });
-      } catch (e) {
-        console.error('Places enrichment failed:', e.message);
       }
+      if (found) {
+        placesResult = { ...placesResult, ...value, address: value.address || existingAddress };
+      }
+    } catch (e) {
+      console.error('Places enrichment failed:', e.message);
     }
 
-    // 2. AI enrichment: cost/tickets, travel times, review highlights, tips
-    let aiResult = { costInfo: null, travelFromHotel: null, reviewHighlights: [], tips: [] };
+    // 2. AI enrichment: cost/tickets, travel times, review highlights, tips —
+    // and, for restaurants with a known website, menu highlights scraped from
+    // the site via Gemini's url_context tool (one combined call).
+    let aiResult = { costInfo: null, travelFromHotel: null, reviewHighlights: [], tips: [], menuHighlights: [] };
     if (genAI) {
       try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+        const scrapeMenu = isMeal && !!placesResult.websiteUri;
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-3.5-flash',
+          ...(scrapeMenu ? { tools: [{ urlContext: {} }] } : {}),
+        });
         const typeLabel = isMeal ? `restaurant (${slot.type.toLowerCase()})` : 'activity/attraction';
         const hotelContext = hotelAddress ? `The traveler's hotel is at: ${hotelAddress}.` : '';
+        const menuContext = scrapeMenu
+          ? `The restaurant's website is ${placesResult.websiteUri} — fetch it (and its menu page if linked from it) and extract real menu items from the site.`
+          : '';
 
         const prompt = `You are a travel research assistant. Provide detailed information about this ${typeLabel} in ${destination}.
 
 Name: ${name}
 Address: ${placesResult.address || 'unknown'}
 ${hotelContext}
+${menuContext}
 
 Return a JSON object with these fields:
 {
@@ -382,6 +357,9 @@ Return a JSON object with these fields:
     "transitMinutes": estimated_public_transit_minutes_as_number,
     "walkMinutes": estimated_walking_minutes_as_number_or_null_if_too_far
   },` : ''}
+  ${scrapeMenu ? `"menuHighlights": [
+    { "name": "dish name from the website's menu", "price": "price with currency, or null if not listed" }
+  ],` : ''}
   "reviewHighlights": [
     "2-3 specific highlights or must-do things at this place based on common visitor feedback"
   ],
@@ -391,6 +369,7 @@ Return a JSON object with these fields:
 }
 
 ${isMeal ? 'For the costInfo tickets, list typical price ranges for different meal types (e.g. lunch set, dinner course, drinks). For reviewHighlights, focus on must-try dishes and atmosphere.' : 'For the costInfo tickets, list admission/ticket types and their prices. For reviewHighlights, focus on must-see exhibits, best experiences, and unique features.'}
+${scrapeMenu ? 'For menuHighlights, list 3-6 signature dishes taken from the fetched website; only include items actually found there, and omit the field if the menu could not be read.' : ''}
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
@@ -403,6 +382,9 @@ Return ONLY valid JSON, no markdown or explanation.`;
         aiResult.travelFromHotel = parsed.travelFromHotel || null;
         aiResult.reviewHighlights = parsed.reviewHighlights || [];
         aiResult.tips = parsed.tips || [];
+        aiResult.menuHighlights = Array.isArray(parsed.menuHighlights)
+          ? parsed.menuHighlights.filter(m => m && m.name).slice(0, 6)
+          : [];
 
         const usage = result.response.usageMetadata;
         if (usage) {

@@ -129,6 +129,20 @@ model ChatMessage {
   @@index([tripId, createdAt])
 }
 
+// Cross-trip cache of Google Places enrichment, so a popular place is billed
+// once instead of per card render / per trip / per user. Place IDs may be
+// stored indefinitely under Google's ToS; the payload itself must be
+// refreshed when older than 30 days (the ToS cap on caching Places content).
+model PlaceCache {
+  id        String   @id @default(cuid())
+  queryKey  String   @unique // normalized "name|address" lookup key
+  placeId   String?
+  data      String   @default("{}")
+  fetchedAt DateTime @default(now())
+
+  @@index([placeId])
+}
+
 model ChatSummary {
   id        String   @id @default(cuid())
   tripId    String   @unique

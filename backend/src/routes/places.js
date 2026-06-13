@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { recordCost, calculatePlacesCost } = require('../costs');
-const { fetchEnrichment, resolvePhotoUrls } = require('../enrichment');
+const { fetchEnrichment, resolvePhotoUrls, resolveMorePhotos } = require('../enrichment');
 const { assertTripAccess } = require('../lib/access');
 const { enrichLimiter } = require('../middleware/rateLimit');
 
@@ -181,7 +181,8 @@ router.get('/details/:placeId', enrichLimiter, async (req, res, next) => {
       },
     });
 
-    recordCost({ tripId, service: 'google-places', operation: 'place-details', costCents: calculatePlacesCost([{ type: 'place-details', count: 1 }]) });
+    // The phone-number fields put this request on the Enterprise tier.
+    recordCost({ tripId, service: 'google-places', operation: 'place-details', costCents: calculatePlacesCost([{ type: 'place-details-enterprise', count: 1 }]) });
 
     if (!response.ok) {
       const err = await response.text();
@@ -194,6 +195,30 @@ router.get('/details/:placeId', enrichLimiter, async (req, res, next) => {
       address: data.formattedAddress || '',
       phoneNumber: data.nationalPhoneNumber || data.internationalPhoneNumber || '',
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/places/more-photos — resolve the cached-but-unresolved photo refs
+// for a place (detail views show 4 photos; cards eagerly load only 2).
+router.post('/more-photos', enrichLimiter, async (req, res, next) => {
+  try {
+    const { placeId, tripId } = req.body;
+    if (!tripId) {
+      return res.status(400).json({ error: 'tripId is required' });
+    }
+    await assertTripAccess(tripId, req.user.id);
+    if (!placeId || !/^[A-Za-z0-9_-]+$/.test(placeId)) {
+      return res.status(400).json({ error: 'Invalid placeId' });
+    }
+
+    const result = await resolveMorePhotos(placeId);
+    if (!result) return res.json({ photos: [] });
+    if (result.ops.length > 0) {
+      recordCost({ tripId, service: 'google-places', operation: 'more-photos', costCents: calculatePlacesCost(result.ops) });
+    }
+    res.json({ photos: result.photos });
   } catch (err) {
     next(err);
   }
