@@ -105,7 +105,7 @@ export const placesApi = {
   autocomplete: (input, locationBias, tripId) => api.post('/places/autocomplete', { input, locationBias, tripId }),
   getPhotos: (name, address, placeId, tripId) => api.get('/places/photos', { params: { name, address, placeId, tripId } }),
   getDetails: (placeId, tripId) => api.get(`/places/details/${placeId}`, { params: { tripId } }),
-  enrich: (name, address, tripId) => api.post('/places/enrich', { name, address, tripId }),
+  enrich: (name, address, tripId, type) => api.post('/places/enrich', { name, address, tripId, type }),
   morePhotos: (placeId, tripId) => api.post('/places/more-photos', { placeId, tripId }),
 };
 

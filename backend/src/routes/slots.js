@@ -309,7 +309,11 @@ router.post('/slots/:id/enrich', enrichLimiter, async (req, res, next) => {
     // reviewCount, actual reviews, address, googleMapsUrl, hours, website.
     let placesResult = { photos: [], rating: null, reviewCount: null, address: existingAddress, googleMapsUrl: null, operatingHours: null, city: null, lat: null, lng: null, reviews: [], websiteUri: null, placeId: null, photosAvailable: 0 };
     try {
-      const { value, ops, found } = await fetchEnrichment(name, existingAddress || destination, { force: !!req.body.force });
+      const { value, ops, found } = await fetchEnrichment(name, existingAddress || destination, {
+        force: !!req.body.force,
+        kind: isMeal ? 'meal' : 'activity',
+        tripId,
+      });
       if (ops.length > 0) {
         recordCost({ tripId, service: 'google-places', operation: 'slot-enrich', costCents: calculatePlacesCost(ops) });
       }
@@ -336,6 +340,11 @@ router.post('/slots/:id/enrich', enrichLimiter, async (req, res, next) => {
         const menuContext = scrapeMenu
           ? `The restaurant's website is ${placesResult.websiteUri} — fetch it (and its menu page if linked from it) and extract real menu items from the site.`
           : '';
+        // Ground highlights/tips in the actual recent Google Maps reviews on
+        // top of broader knowledge of the place.
+        const reviewContext = (placesResult.reviews || []).length > 0
+          ? `Recent Google Maps reviews of this place:\n${placesResult.reviews.map(r => `- (${r.rating ?? '?'} stars) ${String(r.text).slice(0, 300)}`).join('\n')}`
+          : '';
 
         const prompt = `You are a travel research assistant. Provide detailed information about this ${typeLabel} in ${destination}.
 
@@ -343,6 +352,7 @@ Name: ${name}
 Address: ${placesResult.address || 'unknown'}
 ${hotelContext}
 ${menuContext}
+${reviewContext}
 
 Return a JSON object with these fields:
 {
@@ -361,10 +371,10 @@ Return a JSON object with these fields:
     { "name": "dish name from the website's menu", "price": "price with currency, or null if not listed" }
   ],` : ''}
   "reviewHighlights": [
-    "2-3 specific highlights or must-do things at this place based on common visitor feedback"
+    "2-3 specific highlights or must-do things at this place, drawing on the recent reviews above plus what visitors commonly report"
   ],
   "tips": [
-    "2-3 practical tips or things to watch out for"
+    "2-3 practical tips or things to watch out for, drawing on the recent reviews above plus common visitor feedback"
   ]
 }
 

@@ -7,18 +7,33 @@
 //   3. Place Details, Enterprise+Atmosphere tier  -> rating, review count,
 //      actual reviews, hours, phone, website ($25/1k vs $40/1k for the same
 //      fields on Text Search)
-//   4. Photo media for the first EAGER_PHOTOS photos; remaining photo refs
-//      stay in the cache so detail views can resolve them on demand.
+//   4. Photo media for up to PHOTO_CANDIDATES photos, classified once with
+//      Gemini vision (exterior/interior/food/activity) so callers get them in
+//      a deliberate order: exterior, interior, then food (meals) or activity
+//      shots. Labels and URLs live in the cache, so this is a one-time cost
+//      per place per 30 days.
 const { prisma } = require('./lib/access');
 const { safeParseJson } = require('./lib/json');
+const { recordCost } = require('./costs');
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+
+let genAI = null;
+try {
+  const { GoogleGenerativeAI } = require('@google/generative-ai');
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here') {
+    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  }
+} catch (e) {
+  console.warn('Google Generative AI SDK not available for photo classification');
+}
 
 // Google's ToS allows storing place IDs indefinitely but caps caching of all
 // other Places content at 30 days.
 const PLACE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const EAGER_PHOTOS = 2;
-const MAX_PHOTOS = 4;
+const PHOTO_CANDIDATES = 6; // resolved + classified once, cached
+const MAX_PHOTOS = 4;       // what callers receive
+const PHOTO_LABELS = ['exterior', 'interior', 'food', 'activity', 'other'];
 
 const EMPTY_ENRICHMENT = {
   photos: [], rating: null, reviewCount: null, address: null,
@@ -118,11 +133,73 @@ function valueFromPlace(place, photos) {
   };
 }
 
-// The cached payload keeps raw photo resource names so detail views can
-// resolve more photos without a new Details call; strip them from what
-// callers receive (and persist onto ideas/slots).
-function publicValue(stored) {
-  const { photoRefs, ...value } = stored || {};
+// Classify resolved photo URLs with one Gemini vision call so they can be
+// ordered deliberately. Returns lowercase labels aligned to the input order,
+// or null when classification isn't possible (no key, fetch/parse failure).
+async function classifyPhotos(name, photos, tripId) {
+  if (!genAI || photos.length === 0) return null;
+  try {
+    const parts = [{
+      text: `These are ${photos.length} photos of "${name}". Classify each photo, in order, as exactly one of: ${PHOTO_LABELS.map(l => `"${l}"`).join(', ')}. ` +
+        `"exterior" = the building/place from outside; "interior" = inside the venue; "food" = dishes or drinks; "activity" = people doing the activity or the main attraction itself. ` +
+        `Reply with ONLY a JSON array of ${photos.length} strings.`,
+    }];
+    for (const p of photos) {
+      const resp = await fetch(p.url);
+      if (!resp.ok) return null;
+      const buf = Buffer.from(await resp.arrayBuffer());
+      parts.push({ inlineData: { mimeType: resp.headers.get('content-type') || 'image/jpeg', data: buf.toString('base64') } });
+    }
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
+    const result = await model.generateContent(parts);
+    const usage = result.response.usageMetadata;
+    if (usage && tripId) {
+      recordCost({
+        tripId, service: 'gemini-flash', operation: 'photo-classify', model: 'gemini-3.5-flash',
+        inputTokens: usage.promptTokenCount || 0, outputTokens: usage.candidatesTokenCount || 0,
+      });
+    }
+    const cleaned = result.response.text().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const labels = JSON.parse(cleaned);
+    if (!Array.isArray(labels) || labels.length !== photos.length) return null;
+    return labels.map(l => PHOTO_LABELS.includes(String(l).toLowerCase()) ? String(l).toLowerCase() : 'other');
+  } catch (e) {
+    console.error('Photo classification failed:', e.message);
+    return null;
+  }
+}
+
+// Order labeled photos for a consumer: exterior, interior, then two of the
+// kind-preferred label (food for meals, activity otherwise), padded with
+// whatever's left in original order.
+function orderPhotos(labeled, kind) {
+  const preferred = kind === 'meal' ? 'food' : 'activity';
+  const used = new Set();
+  const picked = [];
+  const takeFirst = (label) => {
+    const i = labeled.findIndex((p, idx) => !used.has(idx) && p.label === label);
+    if (i >= 0) { used.add(i); picked.push(labeled[i]); }
+  };
+  takeFirst('exterior');
+  takeFirst('interior');
+  takeFirst(preferred);
+  takeFirst(preferred);
+  for (let i = 0; i < labeled.length && picked.length < MAX_PHOTOS; i++) {
+    if (!used.has(i)) { used.add(i); picked.push(labeled[i]); }
+  }
+  return picked.slice(0, MAX_PHOTOS);
+}
+
+// Shape the cached payload for callers (and for persistence onto ideas/slots):
+// photos come out ordered for the consumer's kind; internal fields stay in the
+// cache. Handles both the classified shape (photosLabeled) and rows written
+// before classification existed (photos + photoRefs).
+function publicValue(stored, kind) {
+  const { photoRefs, photosLabeled, ...value } = stored || {};
+  if (photosLabeled) {
+    const photos = orderPhotos(photosLabeled, kind);
+    return { ...value, photos, photosAvailable: photos.length };
+  }
   return { ...value, photosAvailable: (photoRefs || []).length };
 }
 
@@ -149,15 +226,16 @@ async function writeCache(queryKey, placeId, stored) {
 
 // Returns { value, ops, found }. `ops` lists the billable Places operations
 // performed (empty on cache hits) so the caller can record cost; `found` is
-// false when no place matched.
-async function fetchEnrichment(name, address, { force = false } = {}) {
+// false when no place matched. `kind` ('meal' | 'activity') orders photos for
+// the consumer; `tripId` attributes the photo-classification Gemini cost.
+async function fetchEnrichment(name, address, { force = false, kind = null, tripId = null } = {}) {
   if (!keyConfigured()) return { value: { ...EMPTY_ENRICHMENT }, ops: [], found: false };
 
   const queryKey = queryKeyFor(name, address);
   const cached = await readCache(queryKey);
   if (isFresh(cached) && !force) {
     const stored = safeParseJson(cached.data);
-    if (stored?.placeId) return { value: publicValue(stored), ops: [], found: true, cached: true };
+    if (stored?.placeId) return { value: publicValue(stored, kind), ops: [], found: true, cached: true };
   }
 
   const ops = [];
@@ -173,15 +251,18 @@ async function fetchEnrichment(name, address, { force = false } = {}) {
   const place = await fetchPlaceDetails(placeId);
   if (!place) return { value: { ...EMPTY_ENRICHMENT }, ops, found: false };
 
-  const photoRefs = (place.photos || []).slice(0, MAX_PHOTOS).map(p => ({ name: p.name }));
-  const eager = photoRefs.slice(0, EAGER_PHOTOS);
-  if (eager.length > 0) ops.push({ type: 'photo-media', count: eager.length });
-  const photos = eager.length > 0 ? await resolvePhotoUrls(eager) : [];
+  // Resolve candidate photos and classify them once; labels live in the cache
+  // so every later consumer (any kind, any trip) orders them for free.
+  const candidateRefs = (place.photos || []).slice(0, PHOTO_CANDIDATES);
+  if (candidateRefs.length > 0) ops.push({ type: 'photo-media', count: candidateRefs.length });
+  const resolved = candidateRefs.length > 0 ? await resolvePhotoUrls(candidateRefs) : [];
+  const labels = await classifyPhotos(name, resolved, tripId);
+  const photosLabeled = resolved.map((p, i) => ({ url: p.url, label: labels ? labels[i] : 'other' }));
 
-  const stored = { ...valueFromPlace(place, photos), photoRefs };
+  const stored = { ...valueFromPlace(place, []), photosLabeled };
   await writeCache(queryKey, placeId, stored);
 
-  return { value: publicValue(stored), ops, found: true };
+  return { value: publicValue(stored, kind), ops, found: true };
 }
 
 // Resolve the not-yet-resolved cached photo refs for a place (detail views).
@@ -194,6 +275,10 @@ async function resolveMorePhotos(placeId) {
   if (!row) return null;
 
   const stored = safeParseJson(row.data) || {};
+  // Classified rows already hold every resolved photo — nothing left to bill.
+  if (stored.photosLabeled) {
+    return { photos: stored.photosLabeled.map(p => ({ url: p.url, label: p.label })), ops: [] };
+  }
   const photos = stored.photos || [];
   const refs = (stored.photoRefs || []).slice(photos.length);
   if (refs.length === 0) return { photos, ops: [] };

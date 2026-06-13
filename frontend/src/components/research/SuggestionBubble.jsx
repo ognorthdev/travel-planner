@@ -80,7 +80,7 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
       return;
     }
     setEnriching(true);
-    placesApi.enrich(suggestion.name, address, tripId)
+    placesApi.enrich(suggestion.name, address, tripId, suggestion.type)
       .then(result => {
         setEnriched(result);
         onEnriched?.(suggestion, result); // lift up so it can be saved onto the idea

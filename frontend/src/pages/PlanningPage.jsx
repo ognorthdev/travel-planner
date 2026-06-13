@@ -136,7 +136,13 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
   const tips = e.tips || formData.watchOutFor || [];
   const googleReviews = e.reviews || [];
   const menuHighlights = e.menuHighlights || [];
-  const photoLabels = isMeal ? ['Exterior', 'Interior', 'Food', 'Food'] : ['Exterior', 'Interior', 'Highlight', 'Highlight'];
+  // Real classification labels when enrichment provides them; positional
+  // guesses for older cached data that predates classification.
+  const fallbackLabels = isMeal ? ['Exterior', 'Interior', 'Food', 'Food'] : ['Exterior', 'Interior', 'Highlight', 'Highlight'];
+  const labelFor = (photo, pi) => {
+    if (photo.label && photo.label !== 'other') return photo.label.charAt(0).toUpperCase() + photo.label.slice(1);
+    return fallbackLabels[pi];
+  };
 
   return (
     <div className="space-y-4">
@@ -254,8 +260,8 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
             <div className="grid grid-cols-2 gap-2">
               {photos.slice(0, 4).map((photo, pi) => (
                 <div key={pi} className="relative h-32 rounded-xl overflow-hidden bg-slate-700/50">
-                  <img src={photo.url} alt={`${name} - ${photoLabels[pi]}`} loading="lazy" decoding="async" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  <span className="absolute bottom-1 left-1 text-[10px] font-medium bg-black/60 text-white px-1.5 py-0.5 rounded">{photoLabels[pi]}</span>
+                  <img src={photo.url} alt={`${name} - ${labelFor(photo, pi)}`} loading="lazy" decoding="async" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <span className="absolute bottom-1 left-1 text-[10px] font-medium bg-black/60 text-white px-1.5 py-0.5 rounded">{labelFor(photo, pi)}</span>
                 </div>
               ))}
             </div>

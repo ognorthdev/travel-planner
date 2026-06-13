@@ -228,14 +228,15 @@ router.post('/more-photos', enrichLimiter, async (req, res, next) => {
 // suggestions that aren't saved cards yet). Saved cards persist their enrichment instead.
 router.post('/enrich', enrichLimiter, async (req, res, next) => {
   try {
-    const { name, address, tripId } = req.body;
+    const { name, address, tripId, type } = req.body;
     if (!tripId) {
       return res.status(400).json({ error: 'tripId is required' });
     }
     await assertTripAccess(tripId, req.user.id, { write: true });
     if (!name) return res.json({ photos: [], rating: null, reviewCount: null });
 
-    const { value, ops } = await fetchEnrichment(name, address);
+    const kind = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(type) ? 'meal' : 'activity';
+    const { value, ops } = await fetchEnrichment(name, address, { kind, tripId });
     if (ops.length > 0) {
       recordCost({ tripId, service: 'google-places', operation: 'enrich', costCents: calculatePlacesCost(ops) });
     }

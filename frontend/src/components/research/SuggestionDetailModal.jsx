@@ -62,7 +62,7 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
     setEnriched(null);
     const request = ideaId
       ? researchApi.enrichIdea(ideaId)
-      : placesApi.enrich(suggestion.name, data.address || '', tripId);
+      : placesApi.enrich(suggestion.name, data.address || '', tripId, suggestion.type);
     request.then(result => setEnriched(result)).catch(() => {});
   }, [suggestion.name, data.address, ideaId]);
 
@@ -218,20 +218,27 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
           {photos.length > 0 && (
             <div className="grid grid-cols-2 gap-2">
               {photos.slice(0, 4).map((photo, pi) => {
-                const labels = ['Exterior', 'Interior', 'Food', 'Food'];
+                // Real classification labels when present; positional guesses
+                // for enrichment cached before classification existed.
+                const fallbackLabels = ['Exterior', 'Interior', 'Food', 'Food'];
+                const label = photo.label && photo.label !== 'other'
+                  ? photo.label.charAt(0).toUpperCase() + photo.label.slice(1)
+                  : fallbackLabels[pi];
                 return (
                   <div key={pi} className="relative h-28 rounded-lg overflow-hidden bg-slate-700/50">
                     <img
                       src={photo.url}
-                      alt={`${suggestion.name} - ${labels[pi] || 'Photo'}`}
+                      alt={`${suggestion.name} - ${label || 'Photo'}`}
                       loading="lazy"
                       decoding="async"
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
                     />
-                    <span className="absolute bottom-1 left-1 text-[10px] font-medium bg-black/60 text-white px-1.5 py-0.5 rounded">
-                      {labels[pi]}
-                    </span>
+                    {label && (
+                      <span className="absolute bottom-1 left-1 text-[10px] font-medium bg-black/60 text-white px-1.5 py-0.5 rounded">
+                        {label}
+                      </span>
+                    )}
                   </div>
                 );
               })}

@@ -332,7 +332,8 @@ router.post('/ideas/:id/enrich', enrichLimiter, async (req, res, next) => {
       return res.json(data.enrichment); // already persisted on the card — no Places call
     }
 
-    const { value, ops, found } = await fetchEnrichment(idea.name, data.address || '');
+    const kind = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(idea.type) ? 'meal' : 'activity';
+    const { value, ops, found } = await fetchEnrichment(idea.name, data.address || '', { kind, tripId: idea.tripId });
     if (ops.length > 0) {
       recordCost({ tripId: idea.tripId, service: 'google-places', operation: 'enrich', costCents: calculatePlacesCost(ops) });
     }
