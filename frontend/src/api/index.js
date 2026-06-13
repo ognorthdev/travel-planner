@@ -106,6 +106,7 @@ export const placesApi = {
   getPhotos: (name, address, placeId, tripId) => api.get('/places/photos', { params: { name, address, placeId, tripId } }),
   getDetails: (placeId, tripId) => api.get(`/places/details/${placeId}`, { params: { tripId } }),
   enrich: (name, address, tripId) => api.post('/places/enrich', { name, address, tripId }),
+  morePhotos: (placeId, tripId) => api.post('/places/more-photos', { placeId, tripId }),
 };
 
 export const locationsApi = {

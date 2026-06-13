@@ -29,7 +29,7 @@ function buildTikTokSearchUrl(name, city) {
   return `https://www.tiktok.com/search?q=${encodeURIComponent(query)}`;
 }
 
-function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, destination }) {
+function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, destination, tripId }) {
   const isMeal = ['BREAKFAST', 'LUNCH', 'DINNER'].includes(slotType);
   const Icon = config.icon;
   const name = formData.activityName || formData.restaurantName || formData.name || '';
@@ -59,6 +59,23 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
     if (!name || enrichment) return;
     fetchEnrichment();
   }, [slotId, name]);
+
+  // Enrichment eagerly resolves only 2 photos; this detail view pulls the
+  // remaining cached refs on demand.
+  useEffect(() => {
+    if (!enrichment?.placeId) return;
+    const have = enrichment.photos?.length || 0;
+    if ((enrichment.photosAvailable || 0) <= have) return;
+    let cancelled = false;
+    placesApi.morePhotos(enrichment.placeId, tripId)
+      .then(result => {
+        if (!cancelled && result.photos?.length > have) {
+          setEnrichment(prev => ({ ...prev, photos: result.photos }));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [enrichment?.placeId, enrichment?.photosAvailable, tripId]);
 
   const handleToggleSave = () => {
     const next = !saved;
@@ -117,6 +134,8 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
   const city = e.city || destination.split(',')[0].trim();
   const reviewHighlights = e.reviewHighlights || formData.reviewSummary || [];
   const tips = e.tips || formData.watchOutFor || [];
+  const googleReviews = e.reviews || [];
+  const menuHighlights = e.menuHighlights || [];
   const photoLabels = isMeal ? ['Exterior', 'Interior', 'Food', 'Food'] : ['Exterior', 'Interior', 'Highlight', 'Highlight'];
 
   return (
@@ -267,6 +286,48 @@ function SlotDetailCard({ slotId, slotType, config, formData, onFormDataChange, 
               </a>
             )}
           </div>
+
+          {/* Menu highlights scraped from the restaurant's website */}
+          {isMeal && menuHighlights.length > 0 && (
+            <div className="bg-amber-900/20 border border-amber-700/30 rounded-xl p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Utensils size={13} className="text-amber-400" />
+                <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide">From the Menu</p>
+              </div>
+              <ul className="space-y-1">
+                {menuHighlights.map((item, j) => (
+                  <li key={j} className="flex items-baseline justify-between gap-3 text-sm text-slate-300">
+                    <span>{item.name}</span>
+                    {item.price && <span className="text-xs text-amber-300/90 whitespace-nowrap">{item.price}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Actual Google Maps reviews */}
+          {googleReviews.length > 0 && (
+            <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Recent reviews · Google Maps</p>
+              <div className="space-y-3">
+                {googleReviews.slice(0, 3).map((review, ri) => (
+                  <div key={ri}>
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-0.5">
+                        {Array.from({ length: 5 }).map((_, si) => (
+                          <Star key={si} size={11} className={si < Math.round(review.rating || 0) ? 'text-amber-400 fill-amber-400' : 'text-slate-600'} />
+                        ))}
+                      </div>
+                      <span className="text-xs text-slate-500">
+                        {review.author}{review.relativeTime ? ` · ${review.relativeTime}` : ''}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-300 mt-1 leading-relaxed line-clamp-4">{review.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Review highlights */}
           {reviewHighlights.length > 0 && (
@@ -784,6 +845,7 @@ export default function PlanningPage() {
             formData={formData}
             onFormDataChange={setFormData}
             destination={destination}
+            tripId={tripId}
           />
         )}
 

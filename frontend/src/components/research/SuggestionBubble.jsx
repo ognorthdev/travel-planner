@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Heart, Coffee, Utensils, Moon, Sun, MapPin, Star, Footprints, Bus, Car, UtensilsCrossed, Lightbulb, ThumbsDown, Clock, ExternalLink, Trash2 } from 'lucide-react';
 import { placesApi } from '../../api/index.js';
 
@@ -51,9 +51,29 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
 
   const [enriched, setEnriched] = useState(null);
   const [enriching, setEnriching] = useState(false);
+  const rootRef = useRef(null);
+  const [inView, setInView] = useState(false);
+
+  // Only enrich cards the user actually scrolls to — the AI can stream in more
+  // suggestions than ever get looked at, and each enrichment is a billed call.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setInView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setInView(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
-    if (enriching || enriched) return;
+    if (!inView || enriching || enriched) return;
     // Reuse enrichment already persisted on the card instead of re-billing Places.
     if (data.enrichment) {
       setEnriched(data.enrichment);
@@ -67,7 +87,7 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
       })
       .catch(() => setEnriched(null))
       .finally(() => setEnriching(false));
-  }, [suggestion.name, address]);
+  }, [inView, suggestion.name, address]);
 
   const photos = enriched?.photos || [];
   const rating = enriched?.rating || data.rating;
@@ -84,6 +104,7 @@ export default function SuggestionBubble({ suggestion, isSaved, onToggleSave, on
 
   return (
     <div
+      ref={rootRef}
       className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden cursor-pointer hover:border-slate-600 transition-all animate-slide-up"
       style={style}
       onClick={() => onClick?.(suggestion)}

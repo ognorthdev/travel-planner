@@ -49,10 +49,12 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
   const data = suggestion.data || {};
 
   const [enriched, setEnriched] = useState(null);
+  const [allPhotos, setAllPhotos] = useState(null);
 
   useEffect(() => {
     // 1) Already persisted on the card — no Places call. 2) Saved idea — fetch once and
     // persist onto the idea. 3) Transient suggestion — fetch live.
+    setAllPhotos(null);
     if (data.enrichment) {
       setEnriched(data.enrichment);
       return;
@@ -64,6 +66,21 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
     request.then(result => setEnriched(result)).catch(() => {});
   }, [suggestion.name, data.address, ideaId]);
 
+  // Cards eagerly resolve only 2 photos; the detail view pulls the remaining
+  // cached refs (photo-media is billed per render, so this stays on-demand).
+  useEffect(() => {
+    if (!enriched?.placeId) return;
+    const have = enriched.photos?.length || 0;
+    if ((enriched.photosAvailable || 0) <= have) return;
+    let cancelled = false;
+    placesApi.morePhotos(enriched.placeId, tripId)
+      .then(result => {
+        if (!cancelled && result.photos?.length > have) setAllPhotos(result.photos);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [enriched, tripId]);
+
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === 'ArrowRight' && hasNext && onNext) { e.preventDefault(); onNext(); }
@@ -74,7 +91,8 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
     return () => window.removeEventListener('keydown', handleKey);
   }, [hasNext, hasPrev, onNext, onPrev, onClose]);
 
-  const photos = enriched?.photos || [];
+  const photos = allPhotos || enriched?.photos || [];
+  const googleReviews = enriched?.reviews || [];
   const rating = enriched?.rating || data.rating;
   const reviewCount = enriched?.reviewCount || data.reviewCount;
   const googleMapsUrl = enriched?.googleMapsUrl;
@@ -217,6 +235,30 @@ export default function SuggestionDetailModal({ suggestion, onClose, tripId, des
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Actual Google Maps reviews */}
+          {googleReviews.length > 0 && (
+            <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-3">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Recent reviews · Google Maps</p>
+              <div className="space-y-3">
+                {googleReviews.slice(0, 3).map((review, ri) => (
+                  <div key={ri}>
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-0.5">
+                        {Array.from({ length: 5 }).map((_, si) => (
+                          <Star key={si} size={10} className={si < Math.round(review.rating || 0) ? 'text-amber-400 fill-amber-400' : 'text-slate-600'} />
+                        ))}
+                      </div>
+                      <span className="text-[11px] text-slate-500">
+                        {review.author}{review.relativeTime ? ` · ${review.relativeTime}` : ''}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1 leading-relaxed line-clamp-4">{review.text}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
